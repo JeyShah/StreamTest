@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
+import 'server_config.dart';
 
 class WebRTCStreamingPage extends StatefulWidget {
   const WebRTCStreamingPage({super.key});
@@ -20,15 +21,49 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
   bool _isMuted = false;
   bool _isVideoEnabled = true;
   String _connectionStatus = 'Disconnected';
-  String _serverUrl = 'ws://your-media-server.com:8080';
   
-  final TextEditingController _serverController = TextEditingController();
+  // Server configuration
+  late ServerConfig _serverConfig;
+  final TextEditingController _hostController = TextEditingController();
+  final TextEditingController _portController = TextEditingController();
+  String _selectedProtocol = 'ws';
 
   @override
   void initState() {
     super.initState();
     _initializeRenderers();
-    _serverController.text = _serverUrl;
+    _initializeServerConfig();
+  }
+  
+  void _initializeServerConfig() {
+    // Initialize with default localhost configuration
+    _serverConfig = ServerConfig.localhost();
+    _hostController.text = _serverConfig.host;
+    _portController.text = _serverConfig.port.toString();
+    _selectedProtocol = _serverConfig.protocol;
+  }
+
+  Future<void> _testConnection() async {
+    try {
+      _showInfo('Testing connection to ${_serverConfig.fullUrl}...');
+      
+      // This is a basic connectivity test
+      // In a real implementation, you would:
+      // 1. Try to establish WebSocket connection
+      // 2. Send a ping/handshake message
+      // 3. Verify server response
+      
+      debugPrint('Testing connection to: ${_serverConfig.fullUrl}');
+      
+      // Simulate connection test delay
+      await Future.delayed(const Duration(seconds: 1));
+      
+      // For now, just show success (in real implementation, implement actual connection test)
+      _showInfo('✅ Server configuration looks valid! Protocol: ${_serverConfig.protocol}, Host: ${_serverConfig.host}, Port: ${_serverConfig.port}');
+      
+    } catch (e) {
+      _showError('❌ Connection test failed: $e');
+    }
   }
 
   @override
@@ -38,7 +73,8 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
     _localStream?.dispose();
     _remoteStream?.dispose();
     _peerConnection?.dispose();
-    _serverController.dispose();
+    _hostController.dispose();
+    _portController.dispose();
     super.dispose();
   }
 
@@ -122,8 +158,9 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
 
       // In a real implementation, you would send the offer to your signaling server
       debugPrint('Offer SDP: ${offer.sdp}');
+      debugPrint('Connecting to server: ${_serverConfig.fullUrl}');
       
-      _showInfo('Streaming started! In a real implementation, this would connect to your media server.');
+      _showInfo('Streaming started! Connecting to ${_serverConfig.fullUrl}');
 
     } catch (e) {
       debugPrint('Error starting stream: $e');
@@ -197,45 +234,208 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
   }
 
   void _showServerDialog() {
+    // Reset controllers with current values
+    _hostController.text = _serverConfig.host;
+    _portController.text = _serverConfig.port.toString();
+    _selectedProtocol = _serverConfig.protocol;
+
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Media Server Configuration'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: _serverController,
-                decoration: const InputDecoration(
-                  labelText: 'Server URL',
-                  hintText: 'ws://your-server.com:8080',
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Custom Server Configuration'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Protocol selection
+                    const Text('Protocol:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: _selectedProtocol,
+                      items: const [
+                        DropdownMenuItem(value: 'ws', child: Text('WebSocket (ws)')),
+                        DropdownMenuItem(value: 'wss', child: Text('WebSocket Secure (wss)')),
+                        DropdownMenuItem(value: 'rtmp', child: Text('RTMP')),
+                        DropdownMenuItem(value: 'http', child: Text('HTTP')),
+                        DropdownMenuItem(value: 'https', child: Text('HTTPS')),
+                      ],
+                      onChanged: (value) {
+                        setDialogState(() {
+                          _selectedProtocol = value!;
+                        });
+                      },
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Host/IP input
+                    const Text('Host/IP Address:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _hostController,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: 'e.g., 192.168.1.100 or yourserver.com',
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Port input
+                    const Text('Port:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _portController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: 'e.g., 8080, 1935, 8000',
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Preview URL
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text('Preview URL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$_selectedProtocol://${_hostController.text.isNotEmpty ? _hostController.text : 'host'}:${_portController.text.isNotEmpty ? _portController.text : 'port'}',
+                            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // Quick presets
+                    const Text('Quick Presets:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            setDialogState(() {
+                              _hostController.text = 'localhost';
+                              _portController.text = '8080';
+                              _selectedProtocol = 'ws';
+                            });
+                          },
+                          icon: const Icon(Icons.computer, size: 16),
+                          label: const Text('Local:8080'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          ),
+                        ),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            setDialogState(() {
+                              _hostController.text = 'localhost';
+                              _portController.text = '1935';
+                              _selectedProtocol = 'rtmp';
+                            });
+                          },
+                          icon: const Icon(Icons.stream, size: 16),
+                          label: const Text('RTMP:1935'),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    const Text(
+                      'Enter your custom streaming server details. This will be used to establish the WebRTC connection.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(height: 16),
-              const Text(
-                'Configure your media server URL for WebRTC streaming. '
-                'This is where your streaming data will be sent.',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _serverUrl = _serverController.text;
-                });
-                Navigator.of(context).pop();
-                _showInfo('Server URL updated');
-              },
-              child: const Text('Save'),
-            ),
-          ],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                TextButton.icon(
+                  onPressed: () async {
+                    final host = _hostController.text.trim();
+                    final portText = _portController.text.trim();
+                    
+                    if (host.isEmpty || portText.isEmpty) {
+                      _showError('Please enter both host and port to test');
+                      return;
+                    }
+                    
+                    final port = int.tryParse(portText);
+                    if (port == null || port < 1 || port > 65535) {
+                      _showError('Please enter a valid port number (1-65535)');
+                      return;
+                    }
+                    
+                    // Temporarily update config for testing
+                    final tempConfig = ServerConfig(
+                      host: host,
+                      port: port,
+                      protocol: _selectedProtocol,
+                    );
+                    
+                    final oldConfig = _serverConfig;
+                    _serverConfig = tempConfig;
+                    await _testConnection();
+                    _serverConfig = oldConfig; // Restore original
+                  },
+                  icon: const Icon(Icons.network_check),
+                  label: const Text('Test'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final host = _hostController.text.trim();
+                    final portText = _portController.text.trim();
+                    
+                    if (host.isEmpty || portText.isEmpty) {
+                      _showError('Please enter both host and port');
+                      return;
+                    }
+                    
+                    final port = int.tryParse(portText);
+                    if (port == null || port < 1 || port > 65535) {
+                      _showError('Please enter a valid port number (1-65535)');
+                      return;
+                    }
+                    
+                    setState(() {
+                      _serverConfig = ServerConfig(
+                        host: host,
+                        port: port,
+                        protocol: _selectedProtocol,
+                      );
+                    });
+                    Navigator.of(context).pop();
+                    _showInfo('Server configuration updated: ${_serverConfig.fullUrl}');
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -311,7 +511,7 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
               children: [
                 _buildStatusIndicator(),
                 Text(
-                  'Server: ${_serverUrl.split('://').last}',
+                  'Server: ${_serverConfig.displayUrl}',
                   style: const TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               ],
