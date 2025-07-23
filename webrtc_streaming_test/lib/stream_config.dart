@@ -17,18 +17,18 @@ class StreamConfig {
     this.inputPort = inputServerPort,
     this.outputHost = outputServerIP,
     this.outputPort = outputServerPort,
-    this.protocol = 'rtmp',
-    this.simNumber = '12345', // Default SIM number
+    this.protocol = 'ws',
+    this.simNumber = '923244219594', // Default SIM number
   });
   
-  // Input streaming URL (where app sends video)
-  String get inputUrl => '$protocol://$inputHost:$inputPort';
+  // WebRTC input streaming URL (where app sends video with SIM number)
+  String get inputUrl => '$protocol://$inputHost:$inputPort/$simNumber';
   
   // Output streaming URL (where you watch the stream)
   String get outputUrl => 'http://$outputHost:$outputPort/$simNumber/1.m3u8';
   
-  // RTMP push URL for streaming
-  String get rtmpPushUrl => 'rtmp://$inputHost:$inputPort/live/$simNumber';
+  // WebRTC signaling URL for streaming
+  String get webrtcSignalingUrl => 'ws://$inputHost:$inputPort/$simNumber';
   
   // Display-friendly URLs
   String get inputDisplayUrl => '$inputHost:$inputPort';
@@ -40,7 +40,7 @@ class StreamConfig {
     inputPort: inputServerPort,
     outputHost: outputServerIP,
     outputPort: outputServerPort,
-    protocol: 'rtmp',
+    protocol: 'ws',
     simNumber: simNumber,
   );
   
@@ -60,13 +60,13 @@ class StreamConfig {
     'simNumber': simNumber,
   };
   
-  factory StreamConfig.fromJson(Map<String, dynamic> json) => StreamConfig(
+      factory StreamConfig.fromJson(Map<String, dynamic> json) => StreamConfig(
     inputHost: json['inputHost'] ?? inputServerIP,
     inputPort: json['inputPort'] ?? inputServerPort,
     outputHost: json['outputHost'] ?? outputServerIP,
     outputPort: json['outputPort'] ?? outputServerPort,
-    protocol: json['protocol'] ?? 'rtmp',
-    simNumber: json['simNumber'] ?? '12345',
+    protocol: json['protocol'] ?? 'ws',
+    simNumber: json['simNumber'] ?? '923244219594',
   );
   
   @override

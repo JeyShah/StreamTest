@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'stream_config.dart';
 import 'connection_tester.dart';
+import 'webrtc_signaling.dart';
 
 class WebRTCStreamingPage extends StatefulWidget {
   const WebRTCStreamingPage({super.key});
@@ -11,7 +12,7 @@ class WebRTCStreamingPage extends StatefulWidget {
 }
 
 class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
-  RTCPeerConnection? _peerConnection;
+  WebRTCSignaling? _signaling;
   MediaStream? _localStream;
   MediaStream? _remoteStream;
   
@@ -22,6 +23,7 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
   bool _isMuted = false;
   bool _isVideoEnabled = true;
   String _connectionStatus = 'Disconnected';
+  String _signalingStatus = 'Disconnected';
   
   // Server configuration
   late StreamConfig _streamConfig;
@@ -41,10 +43,43 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
     // Initialize with your specific server configuration
     _streamConfig = StreamConfig.yourServer();
     
+    // Initialize WebRTC signaling
+    _signaling = WebRTCSignaling(_streamConfig);
+    _setupSignalingCallbacks();
+    
     _hostController.text = _streamConfig.inputHost;
     _portController.text = _streamConfig.inputPort.toString();
     _simNumberController.text = _streamConfig.simNumber;
     _selectedProtocol = _streamConfig.protocol;
+  }
+
+  void _setupSignalingCallbacks() {
+    _signaling?.onConnectionStateChanged = (state) {
+      setState(() {
+        _connectionStatus = state;
+      });
+    };
+
+    _signaling?.onSignalingStateChanged = (state) {
+      setState(() {
+        _signalingStatus = state;
+      });
+    };
+
+    _signaling?.onAddRemoteStream = (stream) {
+      setState(() {
+        _remoteStream = stream;
+        _remoteRenderer.srcObject = stream;
+      });
+    };
+
+    _signaling?.onError = (error) {
+      _showError(error);
+    };
+
+    _signaling?.onMessage = (message) {
+      _showInfo(message);
+    };
   }
 
   Future<void> _testConnection() async {
@@ -229,11 +264,11 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
                     children: [
                       const Text('📡 Current Configuration:', style: TextStyle(fontWeight: FontWeight.bold)),
                       const SizedBox(height: 8),
-                      Text('Input: ${_streamConfig.inputUrl}'),
-                      Text('Output: ${_streamConfig.outputUrl}'),
-                      Text('RTMP Push: ${_streamConfig.rtmpPushUrl}'),
+                      Text('WebRTC Signaling: ${_streamConfig.webrtcSignalingUrl}'),
+                      Text('Output Stream: ${_streamConfig.outputUrl}'),
                       Text('SIM Number: ${_streamConfig.simNumber}'),
                       Text('Protocol: ${_streamConfig.protocol}'),
+                      Text('Input Format: ws://host:port/sim_number'),
                     ],
                   ),
                 ),
@@ -258,11 +293,14 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
                         ),
                       ),
                       const SizedBox(height: 8),
-                      Text('Connection: $_connectionStatus'),
+                      Text('Signaling: $_signalingStatus'),
+                      Text('WebRTC: $_connectionStatus'),
                       Text('Audio: ${_isMuted ? "MUTED" : "ACTIVE"}'),
                       Text('Video: ${_isVideoEnabled ? "ACTIVE" : "DISABLED"}'),
                       Text('Local Stream: ${_localStream != null ? "READY" : "NOT READY"}'),
                       Text('Remote Stream: ${_remoteStream != null ? "CONNECTED" : "NOT CONNECTED"}'),
+                      Text('Signaling Connected: ${_signaling?.isConnected ?? false}'),
+                      Text('Peer Connection: ${_signaling?.hasPeerConnection ?? false}'),
                     ],
                   ),
                 ),
@@ -284,11 +322,11 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
                         style: TextStyle(fontWeight: FontWeight.bold),
                       ),
                       const SizedBox(height: 8),
-                      const Text('1. ❌ No stream is being sent to input server'),
-                      const Text('2. ❌ Server not processing RTMP correctly'),
-                      const Text('3. ❌ Wrong protocol (need actual RTMP, not WebRTC)'),
-                      const Text('4. ❌ Server not converting to HLS format'),
-                      const Text('5. ❌ Firewall blocking connections'),
+                      const Text('1. ❌ WebRTC signaling not connecting'),
+                      const Text('2. ❌ Server not accepting WebSocket connections'),
+                      const Text('3. ❌ Wrong SIM number or path format'),
+                      const Text('4. ❌ Server not processing WebRTC streams'),
+                      const Text('5. ❌ Firewall blocking WebSocket connections'),
                     ],
                   ),
                 ),
@@ -311,10 +349,10 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
                       ),
                       const SizedBox(height: 8),
                       const Text('1. Tap "Test Connection" in settings'),
-                      const Text('2. Check if input server accepts connections'),
-                      const Text('3. Verify RTMP server is running on port 1078'),
-                      const Text('4. Test with actual RTMP tools (OBS, FFmpeg)'),
-                      const Text('5. Check server logs for incoming streams'),
+                      const Text('2. Check if WebSocket server accepts connections'),
+                      const Text('3. Verify WebRTC signaling server on port 1078'),
+                      const Text('4. Test WebSocket connection manually'),
+                      const Text('5. Check server logs for WebRTC signaling'),
                     ],
                   ),
                 ),
@@ -345,7 +383,7 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
     _remoteRenderer.dispose();
     _localStream?.dispose();
     _remoteStream?.dispose();
-    _peerConnection?.dispose();
+    _signaling?.disconnect();
     _hostController.dispose();
     _portController.dispose();
     _simNumberController.dispose();
@@ -357,35 +395,7 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
     await _remoteRenderer.initialize();
   }
 
-  Future<void> _createPeerConnection() async {
-    final configuration = <String, dynamic>{
-      'iceServers': [
-        {'urls': 'stun:stun.l.google.com:19302'},
-        {'urls': 'stun:stun1.l.google.com:19302'},
-        {'urls': 'stun:stun2.l.google.com:19302'},
-      ],
-    };
-
-    _peerConnection = await createPeerConnection(configuration);
-
-    _peerConnection!.onIceConnectionState = (RTCIceConnectionState state) {
-      setState(() {
-        _connectionStatus = state.toString().split('.').last;
-      });
-    };
-
-    _peerConnection!.onAddStream = (MediaStream stream) {
-      setState(() {
-        _remoteStream = stream;
-        _remoteRenderer.srcObject = stream;
-      });
-    };
-
-    _peerConnection!.onIceCandidate = (RTCIceCandidate candidate) {
-      // In a real implementation, you would send this to your signaling server
-      debugPrint('ICE Candidate: ${candidate.toMap()}');
-    };
-  }
+  // This method is now handled by the WebRTCSignaling class
 
   Future<void> _getUserMedia() async {
     final Map<String, dynamic> constraints = {
@@ -402,10 +412,6 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
       setState(() {
         _localRenderer.srcObject = _localStream;
       });
-
-      if (_peerConnection != null) {
-        await _peerConnection!.addStream(_localStream!);
-      }
     } catch (e) {
       debugPrint('Error getting user media: $e');
       _showError('Failed to access camera/microphone: $e');
@@ -416,47 +422,63 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
     try {
       setState(() {
         _connectionStatus = 'Connecting...';
+        _signalingStatus = 'Connecting...';
       });
 
-      await _createPeerConnection();
+      // Get user media first
       await _getUserMedia();
 
-      // Create offer
-      RTCSessionDescription offer = await _peerConnection!.createOffer();
-      await _peerConnection!.setLocalDescription(offer);
+      if (_localStream == null) {
+        throw 'Failed to get local media stream';
+      }
+
+      // Connect to signaling server
+      await _signaling!.connect();
+
+      // Create peer connection with local stream
+      await _signaling!.createPeerConnection(_localStream!);
+
+      // Create and send offer
+      await _signaling!.createOffer();
 
       setState(() {
         _isStreaming = true;
-        _connectionStatus = 'Streaming';
       });
 
-      // In a real implementation, you would send the offer to your signaling server
-      debugPrint('Offer SDP: ${offer.sdp}');
-      debugPrint('Streaming to input: ${_streamConfig.inputUrl}');
-      debugPrint('Stream will be available at: ${_streamConfig.outputUrl}');
+      debugPrint('🎯 WebRTC streaming started');
+      debugPrint('📡 Signaling URL: ${_streamConfig.webrtcSignalingUrl}');
+      debugPrint('📺 SIM Number: ${_streamConfig.simNumber}');
+      debugPrint('🎬 Output URL: ${_streamConfig.outputUrl}');
       
-      _showInfo('Streaming started!\nSending to: ${_streamConfig.inputUrl}\nWatch at: ${_streamConfig.outputUrl}');
+      _showInfo('WebRTC streaming started!\n'
+          'Signaling: ${_streamConfig.inputUrl}\n'
+          'SIM: ${_streamConfig.simNumber}\n'
+          'Watch at: ${_streamConfig.outputUrl}');
 
     } catch (e) {
-      debugPrint('Error starting stream: $e');
+      debugPrint('❌ Error starting stream: $e');
       _showError('Failed to start streaming: $e');
       setState(() {
         _connectionStatus = 'Error';
+        _signalingStatus = 'Error';
       });
     }
   }
 
   Future<void> _stopStreaming() async {
+    // Disconnect signaling
+    await _signaling?.disconnect();
+
+    // Dispose media streams
     await _localStream?.dispose();
     await _remoteStream?.dispose();
-    await _peerConnection?.dispose();
 
     setState(() {
       _localStream = null;
       _remoteStream = null;
-      _peerConnection = null;
       _isStreaming = false;
       _connectionStatus = 'Disconnected';
+      _signalingStatus = 'Disconnected';
       _localRenderer.srcObject = null;
       _remoteRenderer.srcObject = null;
     });
@@ -629,8 +651,8 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
                               setDialogState(() {
                                 _hostController.text = StreamConfig.inputServerIP;
                                 _portController.text = StreamConfig.inputServerPort.toString();
-                                _selectedProtocol = 'rtmp';
-                                _simNumberController.text = '12345';
+                                _selectedProtocol = 'ws';
+                                _simNumberController.text = '923244219594';
                               });
                             },
                             icon: const Icon(Icons.cloud, size: 16),
@@ -747,6 +769,9 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
                           protocol: _selectedProtocol,
                           simNumber: simNumber,
                         );
+                        
+                        // Update signaling configuration
+                        _signaling?.updateConfig(_streamConfig);
                       });
                       Navigator.of(context).pop();
                       _showInfo('Server configuration updated!\nInput: ${_streamConfig.inputUrl}\nOutput: ${_streamConfig.outputUrl}');
@@ -764,27 +789,35 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
   Widget _buildStatusIndicator() {
     Color statusColor;
     IconData statusIcon;
+    String displayStatus;
 
-    switch (_connectionStatus) {
-      case 'connected':
-        statusColor = Colors.green;
-        statusIcon = Icons.wifi;
-        break;
-      case 'Streaming':
-        statusColor = Colors.blue;
-        statusIcon = Icons.stream;
-        break;
-      case 'Connecting...':
-        statusColor = Colors.orange;
-        statusIcon = Icons.sync;
-        break;
-      case 'Error':
-        statusColor = Colors.red;
-        statusIcon = Icons.error;
-        break;
-      default:
-        statusColor = Colors.grey;
-        statusIcon = Icons.wifi_off;
+    if (_isStreaming) {
+      statusColor = Colors.green;
+      statusIcon = Icons.stream;
+      displayStatus = 'Streaming';
+    } else {
+      switch (_signalingStatus) {
+        case 'connected':
+          statusColor = Colors.blue;
+          statusIcon = Icons.wifi;
+          displayStatus = 'Connected';
+          break;
+        case 'Connecting...':
+          statusColor = Colors.orange;
+          statusIcon = Icons.sync;
+          displayStatus = 'Connecting...';
+          break;
+        case 'error':
+        case 'Error':
+          statusColor = Colors.red;
+          statusIcon = Icons.error;
+          displayStatus = 'Error';
+          break;
+        default:
+          statusColor = Colors.grey;
+          statusIcon = Icons.wifi_off;
+          displayStatus = 'Disconnected';
+      }
     }
 
     return Container(
@@ -800,7 +833,7 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
           Icon(statusIcon, size: 16, color: statusColor),
           const SizedBox(width: 6),
           Text(
-            _connectionStatus,
+            displayStatus,
             style: TextStyle(color: statusColor, fontWeight: FontWeight.bold),
           ),
         ],
