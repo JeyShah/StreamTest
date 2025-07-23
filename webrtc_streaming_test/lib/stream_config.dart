@@ -28,7 +28,7 @@ class StreamConfig {
   String get outputUrl => 'http://$outputHost:$outputPort/$simNumber/1.m3u8';
   
   // WebRTC signaling URL for streaming
-  String get webrtcSignalingUrl => 'ws://$inputHost:$inputPort/$simNumber';
+  String get webrtcSignalingUrl => 'ws://$inputHost:$inputPort';
   
   // Display-friendly URLs
   String get inputDisplayUrl => '$inputHost:$inputPort';

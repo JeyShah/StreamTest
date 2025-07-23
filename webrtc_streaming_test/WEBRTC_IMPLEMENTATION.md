@@ -5,9 +5,9 @@
 Your Flutter app now implements **proper WebRTC streaming** with **SIM number in URL path** as requested:
 
 ### 🔧 **WebRTC Configuration**
-- **Input URL Format**: `ws://47.130.109.65:1078/923244219594`
+- **Input URL Format**: `ws://47.130.109.65:1078`
 - **Protocol**: WebSocket (ws) for WebRTC signaling
-- **SIM Integration**: SIM number included in connection path
+- **SIM Integration**: SIM number included in WebSocket messages
 - **Output URL**: `http://47.130.109.65:8080/923244219594/1.m3u8`
 
 ### 📡 **WebRTC Signaling Implementation**
@@ -21,7 +21,7 @@ Your Flutter app now implements **proper WebRTC streaming** with **SIM number in
 
 ### 1. **Connection Flow**
 ```
-1. App connects to: ws://47.130.109.65:1078/923244219594
+1. App connects to: ws://47.130.109.65:1078
 2. Sends join message with SIM number
 3. Creates WebRTC peer connection
 4. Exchanges offer/answer/ICE candidates
@@ -111,7 +111,7 @@ flutter run
 ```
 
 ### 2. **Your Server is Pre-configured**
-- **Signaling URL**: `ws://47.130.109.65:1078/923244219594`
+- **Signaling URL**: `ws://47.130.109.65:1078`
 - **Output URL**: `http://47.130.109.65:8080/923244219594/1.m3u8`
 - **Default SIM**: `923244219594`
 
@@ -168,7 +168,7 @@ This tests:
 ### 2. **Manual WebSocket Test**
 ```bash
 # Test WebSocket connection with SIM
-wscat -c ws://47.130.109.65:1078/923244219594
+wscat -c ws://47.130.109.65:1078
 ```
 
 ### 3. **Debug Information**
@@ -268,8 +268,8 @@ flutter run
 ```
 
 **Features:**
-- ✅ **WebRTC signaling** to `ws://47.130.109.65:1078/923244219594`
-- ✅ **SIM number integration** in URL path
+- ✅ **WebRTC signaling** to `ws://47.130.109.65:1078`
+- ✅ **SIM number integration** in WebSocket messages
 - ✅ **Real-time streaming** via WebRTC
 - ✅ **Comprehensive debugging** tools
 - ✅ **Connection testing** and monitoring
