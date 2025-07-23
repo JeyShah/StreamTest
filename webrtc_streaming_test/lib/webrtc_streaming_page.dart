@@ -397,24 +397,54 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
 
   // This method is now handled by the WebRTCSignaling class
 
-  Future<void> _getUserMedia() async {
-    final Map<String, dynamic> constraints = {
-      'audio': true,
-      'video': {
-        'facingMode': 'user',
-        'width': 1280,
-        'height': 720,
-      },
-    };
-
+  Future<void> _checkAvailableDevices() async {
     try {
-      _localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      final devices = await navigator.mediaDevices.enumerateDevices();
+      debugPrint('Available devices:');
+      for (var device in devices) {
+        debugPrint('  ${device.kind}: ${device.label}');
+      }
+    } catch (e) {
+      debugPrint('Failed to enumerate devices: $e');
+    }
+  }
+
+  Future<void> _getUserMedia() async {
+    try {
+      // First, try with basic constraints for better macOS compatibility
+      Map<String, dynamic> constraints = {
+        'audio': true,
+        'video': true,
+      };
+
+             debugPrint('Attempting getUserMedia with basic constraints...');
+       await _checkAvailableDevices();
+       _localStream = await navigator.mediaDevices.getUserMedia(constraints);
+      
       setState(() {
         _localRenderer.srcObject = _localStream;
       });
+      debugPrint('Successfully got user media');
     } catch (e) {
-      debugPrint('Error getting user media: $e');
-      _showError('Failed to access camera/microphone: $e');
+      debugPrint('Basic constraints failed, trying without audio: $e');
+      
+      // If basic constraints fail, try video only
+      try {
+        Map<String, dynamic> videoOnlyConstraints = {
+          'audio': false,
+          'video': true,
+        };
+        
+        _localStream = await navigator.mediaDevices.getUserMedia(videoOnlyConstraints);
+        setState(() {
+          _localRenderer.srcObject = _localStream;
+        });
+        debugPrint('Successfully got video-only media');
+        _showError('Camera access granted, but microphone unavailable: $e');
+      } catch (e2) {
+        debugPrint('Video-only constraints also failed: $e2');
+        _showError('Failed to access camera/microphone. Unable to getUserMedia: $e2. Failed to start streaming:Failed to get local media stream');
+      }
     }
   }
 

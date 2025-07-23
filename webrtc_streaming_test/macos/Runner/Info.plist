@@ -28,5 +28,9 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs camera access for WebRTC video streaming</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app needs microphone access for WebRTC audio streaming</string>
 </dict>
 </plist>
