@@ -1,0 +1,74 @@
+class StreamConfig {
+  // Your specific server configuration
+  static const String inputServerIP = "47.130.109.65";
+  static const int inputServerPort = 1078;
+  static const String outputServerIP = "47.130.109.65";
+  static const int outputServerPort = 8080;
+  
+  final String inputHost;
+  final int inputPort;
+  final String outputHost;
+  final int outputPort;
+  final String protocol;
+  final String simNumber;
+  
+  StreamConfig({
+    this.inputHost = inputServerIP,
+    this.inputPort = inputServerPort,
+    this.outputHost = outputServerIP,
+    this.outputPort = outputServerPort,
+    this.protocol = 'rtmp',
+    this.simNumber = '12345', // Default SIM number
+  });
+  
+  // Input streaming URL (where app sends video)
+  String get inputUrl => '$protocol://$inputHost:$inputPort';
+  
+  // Output streaming URL (where you watch the stream)
+  String get outputUrl => 'http://$outputHost:$outputPort/$simNumber/1.m3u8';
+  
+  // RTMP push URL for streaming
+  String get rtmpPushUrl => 'rtmp://$inputHost:$inputPort/live/$simNumber';
+  
+  // Display-friendly URLs
+  String get inputDisplayUrl => '$inputHost:$inputPort';
+  String get outputDisplayUrl => '$outputHost:$outputPort/$simNumber/1.m3u8';
+  
+  // Predefined configurations for your server
+  static StreamConfig yourServer({String simNumber = '12345'}) => StreamConfig(
+    inputHost: inputServerIP,
+    inputPort: inputServerPort,
+    outputHost: outputServerIP,
+    outputPort: outputServerPort,
+    protocol: 'rtmp',
+    simNumber: simNumber,
+  );
+  
+  // Test if this is your specific server
+  bool get isYourServer => 
+    inputHost == inputServerIP && 
+    inputPort == inputServerPort &&
+    outputHost == outputServerIP && 
+    outputPort == outputServerPort;
+  
+  Map<String, dynamic> toJson() => {
+    'inputHost': inputHost,
+    'inputPort': inputPort,
+    'outputHost': outputHost,
+    'outputPort': outputPort,
+    'protocol': protocol,
+    'simNumber': simNumber,
+  };
+  
+  factory StreamConfig.fromJson(Map<String, dynamic> json) => StreamConfig(
+    inputHost: json['inputHost'] ?? inputServerIP,
+    inputPort: json['inputPort'] ?? inputServerPort,
+    outputHost: json['outputHost'] ?? outputServerIP,
+    outputPort: json['outputPort'] ?? outputServerPort,
+    protocol: json['protocol'] ?? 'rtmp',
+    simNumber: json['simNumber'] ?? '12345',
+  );
+  
+  @override
+  String toString() => 'Input: $inputUrl, Output: $outputUrl';
+}
