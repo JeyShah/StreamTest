@@ -5,10 +5,10 @@
 Your Flutter app now implements **proper WebRTC streaming** with **SIM number in URL path** as requested:
 
 ### 🔧 **WebRTC Configuration**
-- **Input URL Format**: `ws://47.130.109.65:1078/923001234567`
+- **Input URL Format**: `ws://47.130.109.65:1078/923244219594`
 - **Protocol**: WebSocket (ws) for WebRTC signaling
 - **SIM Integration**: SIM number included in connection path
-- **Output URL**: `http://47.130.109.65:8080/923001234567/1.m3u8`
+- **Output URL**: `http://47.130.109.65:8080/923244219594/1.m3u8`
 
 ### 📡 **WebRTC Signaling Implementation**
 - ✅ **WebSocket Connection** to your server with SIM number
@@ -21,12 +21,12 @@ Your Flutter app now implements **proper WebRTC streaming** with **SIM number in
 
 ### 1. **Connection Flow**
 ```
-1. App connects to: ws://47.130.109.65:1078/923001234567
+1. App connects to: ws://47.130.109.65:1078/923244219594
 2. Sends join message with SIM number
 3. Creates WebRTC peer connection
 4. Exchanges offer/answer/ICE candidates
 5. Streams video/audio via WebRTC
-6. Server makes stream available at: http://47.130.109.65:8080/923001234567/1.m3u8
+6. Server makes stream available at: http://47.130.109.65:8080/923244219594/1.m3u8
 ```
 
 ### 2. **WebRTC Signaling Messages**
@@ -36,7 +36,7 @@ Your app sends these messages to your server:
 ```json
 {
   "type": "join",
-  "simNumber": "923001234567",
+  "simNumber": "923244219594",
   "timestamp": 1640995200000
 }
 ```
@@ -49,7 +49,7 @@ Your app sends these messages to your server:
     "type": "offer",
     "sdp": "v=0\r\no=- ... [SDP content]"
   },
-  "simNumber": "923001234567",
+  "simNumber": "923244219594",
   "timestamp": 1640995200000
 }
 ```
@@ -63,7 +63,7 @@ Your app sends these messages to your server:
     "sdpMid": "0",
     "sdpMLineIndex": 0
   },
-  "simNumber": "923001234567"
+  "simNumber": "923244219594"
 }
 ```
 
@@ -74,7 +74,7 @@ Your server should respond with:
 ```json
 {
   "type": "joined",
-  "simNumber": "923001234567",
+  "simNumber": "923244219594",
   "message": "Successfully joined room"
 }
 ```
@@ -111,9 +111,9 @@ flutter run
 ```
 
 ### 2. **Your Server is Pre-configured**
-- **Signaling URL**: `ws://47.130.109.65:1078/923001234567`
-- **Output URL**: `http://47.130.109.65:8080/923001234567/1.m3u8`
-- **Default SIM**: `923001234567`
+- **Signaling URL**: `ws://47.130.109.65:1078/923244219594`
+- **Output URL**: `http://47.130.109.65:8080/923244219594/1.m3u8`
+- **Default SIM**: `923244219594`
 
 ### 3. **Change SIM Number**
 1. Tap **⚙️ Settings**
@@ -139,7 +139,7 @@ flutter run
 ### 1. **WebSocket Server on Port 1078**
 Your server must:
 - ✅ Accept WebSocket connections on port 1078
-- ✅ Handle URL path with SIM number: `/923001234567`
+- ✅ Handle URL path with SIM number: `/923244219594`
 - ✅ Process WebRTC signaling messages
 - ✅ Implement offer/answer/ICE exchange
 
@@ -168,7 +168,7 @@ This tests:
 ### 2. **Manual WebSocket Test**
 ```bash
 # Test WebSocket connection with SIM
-wscat -c ws://47.130.109.65:1078/923001234567
+wscat -c ws://47.130.109.65:1078/923244219594
 ```
 
 ### 3. **Debug Information**
@@ -268,10 +268,10 @@ flutter run
 ```
 
 **Features:**
-- ✅ **WebRTC signaling** to `ws://47.130.109.65:1078/923001234567`
+- ✅ **WebRTC signaling** to `ws://47.130.109.65:1078/923244219594`
 - ✅ **SIM number integration** in URL path
 - ✅ **Real-time streaming** via WebRTC
 - ✅ **Comprehensive debugging** tools
 - ✅ **Connection testing** and monitoring
 
-**Your stream will be available at:** `http://47.130.109.65:8080/923001234567/1.m3u8` 🚀
+**Your stream will be available at:** `http://47.130.109.65:8080/923244219594/1.m3u8` 🚀

@@ -652,7 +652,7 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
                                 _hostController.text = StreamConfig.inputServerIP;
                                 _portController.text = StreamConfig.inputServerPort.toString();
                                 _selectedProtocol = 'ws';
-                                _simNumberController.text = '923001234567';
+                                _simNumberController.text = '923244219594';
                               });
                             },
                             icon: const Icon(Icons.cloud, size: 16),

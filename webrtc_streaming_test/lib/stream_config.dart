@@ -18,7 +18,7 @@ class StreamConfig {
     this.outputHost = outputServerIP,
     this.outputPort = outputServerPort,
     this.protocol = 'ws',
-    this.simNumber = '923001234567', // Default SIM number
+    this.simNumber = '923244219594', // Default SIM number
   });
   
   // WebRTC input streaming URL (where app sends video with SIM number)
@@ -66,7 +66,7 @@ class StreamConfig {
     outputHost: json['outputHost'] ?? outputServerIP,
     outputPort: json['outputPort'] ?? outputServerPort,
     protocol: json['protocol'] ?? 'ws',
-    simNumber: json['simNumber'] ?? '923001234567',
+    simNumber: json['simNumber'] ?? '923244219594',
   );
   
   @override
