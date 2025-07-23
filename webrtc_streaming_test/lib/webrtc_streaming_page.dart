@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'stream_config.dart';
+import 'connection_tester.dart';
 
 class WebRTCStreamingPage extends StatefulWidget {
   const WebRTCStreamingPage({super.key});
@@ -48,29 +49,294 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
 
   Future<void> _testConnection() async {
     try {
-      _showInfo('Testing connection to your streaming server...');
+      _showInfo('🔍 Testing server connectivity...');
       
-      // This is a basic connectivity test
-      // In a real implementation, you would:
-      // 1. Try to establish RTMP connection to input port
-      // 2. Test HTTP access to output endpoint
-      // 3. Verify server response
+      final results = await ConnectionTester.testServerConnectivity(
+        inputHost: _streamConfig.inputHost,
+        inputPort: _streamConfig.inputPort,
+        outputHost: _streamConfig.outputHost,
+        outputPort: _streamConfig.outputPort,
+        simNumber: _streamConfig.simNumber,
+      );
       
-      debugPrint('Testing connection to input: ${_streamConfig.inputUrl}');
-      debugPrint('Testing connection to output: ${_streamConfig.outputUrl}');
-      
-      // Simulate connection test delay
-      await Future.delayed(const Duration(seconds: 1));
-      
-      // For now, just show success (in real implementation, implement actual connection test)
-      _showInfo('✅ Server configuration looks valid!\n'
-          'Input: ${_streamConfig.inputUrl}\n'
-          'Output: ${_streamConfig.outputUrl}\n'
-          'SIM: ${_streamConfig.simNumber}');
+      _showConnectionTestResults(results);
       
     } catch (e) {
       _showError('❌ Connection test failed: $e');
     }
+  }
+
+  void _showConnectionTestResults(Map<String, dynamic> results) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(
+                Icons.network_check,
+                color: ConnectionTester.getStatusColor(results['overall']['status']),
+              ),
+              const SizedBox(width: 8),
+              const Text('Connection Test Results'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Overall Status
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: ConnectionTester.getStatusColor(results['overall']['status']).withOpacity(0.1),
+                    border: Border.all(color: ConnectionTester.getStatusColor(results['overall']['status'])),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Text(
+                        ConnectionTester.getStatusIcon(results['overall']['status']),
+                        style: const TextStyle(fontSize: 20),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          results['overall']['message'],
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: ConnectionTester.getStatusColor(results['overall']['status']),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Individual Test Results
+                _buildTestResult('Input Server (${_streamConfig.inputHost}:${_streamConfig.inputPort})', results['inputServer']),
+                _buildTestResult('Output Server (${_streamConfig.outputHost}:${_streamConfig.outputPort})', results['outputServer']),
+                _buildTestResult('Stream URL (${_streamConfig.simNumber}/1.m3u8)', results['outputStream']),
+                
+                const SizedBox(height: 16),
+                
+                // Troubleshooting Tips
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    border: Border.all(color: Colors.blue.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '💡 Troubleshooting Tips:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('• Input server should accept RTMP streams on port 1078'),
+                      const Text('• Output server should serve HLS streams on port 8080'),
+                      const Text('• Stream URL will be 404 until you start streaming'),
+                      const Text('• Check firewall settings if connections fail'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _testConnection(); // Re-run test
+              },
+              child: const Text('Test Again'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildTestResult(String title, Map<String, dynamic> result) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            ConnectionTester.getStatusIcon(result['status']),
+            style: const TextStyle(fontSize: 16),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  result['message'],
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: ConnectionTester.getStatusColor(result['status']),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDebugInfo() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.bug_report, color: Colors.blue),
+              SizedBox(width: 8),
+              Text('Debug Information'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Current Configuration
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('📡 Current Configuration:', style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Text('Input: ${_streamConfig.inputUrl}'),
+                      Text('Output: ${_streamConfig.outputUrl}'),
+                      Text('RTMP Push: ${_streamConfig.rtmpPushUrl}'),
+                      Text('SIM Number: ${_streamConfig.simNumber}'),
+                      Text('Protocol: ${_streamConfig.protocol}'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Stream Status
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _isStreaming ? Colors.green.shade50 : Colors.orange.shade50,
+                    border: Border.all(color: _isStreaming ? Colors.green : Colors.orange),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '🎥 Stream Status: ${_isStreaming ? "ACTIVE" : "INACTIVE"}',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: _isStreaming ? Colors.green.shade700 : Colors.orange.shade700,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text('Connection: $_connectionStatus'),
+                      Text('Audio: ${_isMuted ? "MUTED" : "ACTIVE"}'),
+                      Text('Video: ${_isVideoEnabled ? "ACTIVE" : "DISABLED"}'),
+                      Text('Local Stream: ${_localStream != null ? "READY" : "NOT READY"}'),
+                      Text('Remote Stream: ${_remoteStream != null ? "CONNECTED" : "NOT CONNECTED"}'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Troubleshooting
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    border: Border.all(color: Colors.red.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '🔧 If Output URL Shows Loading Only:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('1. ❌ No stream is being sent to input server'),
+                      const Text('2. ❌ Server not processing RTMP correctly'),
+                      const Text('3. ❌ Wrong protocol (need actual RTMP, not WebRTC)'),
+                      const Text('4. ❌ Server not converting to HLS format'),
+                      const Text('5. ❌ Firewall blocking connections'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                
+                // Testing Instructions
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    border: Border.all(color: Colors.blue.shade300),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '✅ Next Steps to Debug:',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text('1. Tap "Test Connection" in settings'),
+                      const Text('2. Check if input server accepts connections'),
+                      const Text('3. Verify RTMP server is running on port 1078'),
+                      const Text('4. Test with actual RTMP tools (OBS, FFmpeg)'),
+                      const Text('5. Check server logs for incoming streams'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Close'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _testConnection();
+              },
+              child: const Text('Test Connection'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -550,8 +816,14 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           IconButton(
+            onPressed: _showDebugInfo,
+            icon: const Icon(Icons.bug_report),
+            tooltip: 'Debug Info',
+          ),
+          IconButton(
             onPressed: _showServerDialog,
             icon: const Icon(Icons.settings),
+            tooltip: 'Server Settings',
           ),
         ],
       ),
