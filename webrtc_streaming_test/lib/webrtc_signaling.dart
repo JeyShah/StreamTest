@@ -35,6 +35,8 @@ class WebRTCSignaling {
   Future<void> connect() async {
     try {
       debugPrint('🔗 Connecting to WebRTC signaling server: $signalingUrl');
+      debugPrint('🔍 Parsed URI: ${Uri.parse(signalingUrl)}');
+      debugPrint('🔍 URI scheme: ${Uri.parse(signalingUrl).scheme}');
       
       _channel = WebSocketChannel.connect(Uri.parse(signalingUrl));
       

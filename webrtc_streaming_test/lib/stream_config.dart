@@ -35,7 +35,7 @@ class StreamConfig {
   String get outputDisplayUrl => '$outputHost:$outputPort/$simNumber/1.m3u8';
   
   // Predefined configurations for your server
-  static StreamConfig yourServer({String simNumber = '12345'}) => StreamConfig(
+  static StreamConfig yourServer({String simNumber = '923244219594'}) => StreamConfig(
     inputHost: inputServerIP,
     inputPort: inputServerPort,
     outputHost: outputServerIP,

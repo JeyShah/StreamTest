@@ -41,7 +41,7 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
   
   void _initializeServerConfig() {
     // Initialize with your specific server configuration
-    _streamConfig = StreamConfig.yourServer();
+    _streamConfig = StreamConfig.yourServer(simNumber: '923244219594');
     
     // Initialize WebRTC signaling
     _signaling = WebRTCSignaling(_streamConfig);
@@ -759,7 +759,7 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
                         inputHost: host,
                         inputPort: port,
                         protocol: _selectedProtocol,
-                        simNumber: simNumber.isNotEmpty ? simNumber : '12345',
+                        simNumber: simNumber.isNotEmpty ? simNumber : '923244219594',
                       );
                       
                       final oldStreamConfig = _streamConfig;
