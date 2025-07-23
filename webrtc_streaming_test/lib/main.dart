@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'webrtc_streaming_page.dart';
 
@@ -39,19 +40,37 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _checkPermissions() async {
-    Map<Permission, PermissionStatus> statuses = await [
-      Permission.camera,
-      Permission.microphone,
-    ].request();
+    // Skip permission check for desktop platforms that don't support permission_handler
+    if (defaultTargetPlatform == TargetPlatform.macOS || 
+        defaultTargetPlatform == TargetPlatform.windows || 
+        defaultTargetPlatform == TargetPlatform.linux) {
+      setState(() {
+        _permissionsGranted = true; // Desktop platforms handle permissions at system level
+      });
+      return;
+    }
 
-    bool allGranted = statuses.values.every((status) => status.isGranted);
-    
-    setState(() {
-      _permissionsGranted = allGranted;
-    });
+    try {
+      Map<Permission, PermissionStatus> statuses = await [
+        Permission.camera,
+        Permission.microphone,
+      ].request();
 
-    if (!allGranted) {
-      _showPermissionDialog();
+      bool allGranted = statuses.values.every((status) => status.isGranted);
+      
+      setState(() {
+        _permissionsGranted = allGranted;
+      });
+
+      if (!allGranted) {
+        _showPermissionDialog();
+      }
+    } catch (e) {
+      // Handle unexpected platform issues
+      print('Permission check failed: $e');
+      setState(() {
+        _permissionsGranted = true; // Fallback to allow app to continue
+      });
     }
   }
 
