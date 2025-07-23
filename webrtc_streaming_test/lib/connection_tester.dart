@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:web_socket_channel/status.dart' as status;
 import 'stream_config.dart';
@@ -61,7 +59,7 @@ class ConnectionTester {
     String testName, 
     Map<String, dynamic> tests
   ) async {
-    final test = {
+    final test = <String, dynamic>{
       'status': 'testing',
       'startTime': DateTime.now().toIso8601String(),
     };
@@ -74,12 +72,13 @@ class ConnectionTester {
       final request = await client.openUrl('GET', Uri.parse('http://$host:$port'));
       final response = await request.close();
       
-      test['status'] = 'success';
-      test['httpStatus'] = response.statusCode;
-      test['headers'] = <String, String>{};
-      response.headers.forEach((name, values) {
-        test['headers'][name] = values.join(', ');
-      });
+             test['status'] = 'success';
+       test['httpStatus'] = response.statusCode.toString();
+       final headers = <String, String>{};
+       response.headers.forEach((name, values) {
+         headers[name] = values.join(', ');
+       });
+       test['headers'] = headers;
       
       client.close();
     } catch (e) {
@@ -94,7 +93,7 @@ class ConnectionTester {
     StreamConfig config, 
     Map<String, dynamic> tests
   ) async {
-    final test = {
+    final test = <String, dynamic>{
       'status': 'testing',
       'startTime': DateTime.now().toIso8601String(),
       'url': config.webrtcSignalingUrl,
@@ -103,11 +102,11 @@ class ConnectionTester {
 
     try {
       final uri = Uri.parse(config.webrtcSignalingUrl);
-      test['parsedUri'] = uri.toString();
-      test['scheme'] = uri.scheme;
-      test['host'] = uri.host;
-      test['port'] = uri.port;
-      test['path'] = uri.path;
+             test['parsedUri'] = uri.toString();
+       test['scheme'] = uri.scheme;
+       test['host'] = uri.host;
+       test['port'] = uri.port.toString();
+       test['path'] = uri.path;
 
       // Attempt WebSocket connection with timeout
       final channel = WebSocketChannel.connect(uri);
@@ -180,7 +179,7 @@ class ConnectionTester {
     StreamConfig config, 
     Map<String, dynamic> tests
   ) async {
-    final test = {
+    final test = <String, dynamic>{
       'status': 'testing',
       'startTime': DateTime.now().toIso8601String(),
     };
