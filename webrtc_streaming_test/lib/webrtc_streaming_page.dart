@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
-import 'server_config.dart';
+import 'stream_config.dart';
 
 class WebRTCStreamingPage extends StatefulWidget {
   const WebRTCStreamingPage({super.key});
@@ -23,9 +23,10 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
   String _connectionStatus = 'Disconnected';
   
   // Server configuration
-  late ServerConfig _serverConfig;
+  late StreamConfig _streamConfig;
   final TextEditingController _hostController = TextEditingController();
   final TextEditingController _portController = TextEditingController();
+  final TextEditingController _simNumberController = TextEditingController();
   String _selectedProtocol = 'ws';
 
   @override
@@ -36,30 +37,36 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
   }
   
   void _initializeServerConfig() {
-    // Initialize with default localhost configuration
-    _serverConfig = ServerConfig.localhost();
-    _hostController.text = _serverConfig.host;
-    _portController.text = _serverConfig.port.toString();
-    _selectedProtocol = _serverConfig.protocol;
+    // Initialize with your specific server configuration
+    _streamConfig = StreamConfig.yourServer();
+    
+    _hostController.text = _streamConfig.inputHost;
+    _portController.text = _streamConfig.inputPort.toString();
+    _simNumberController.text = _streamConfig.simNumber;
+    _selectedProtocol = _streamConfig.protocol;
   }
 
   Future<void> _testConnection() async {
     try {
-      _showInfo('Testing connection to ${_serverConfig.fullUrl}...');
+      _showInfo('Testing connection to your streaming server...');
       
       // This is a basic connectivity test
       // In a real implementation, you would:
-      // 1. Try to establish WebSocket connection
-      // 2. Send a ping/handshake message
+      // 1. Try to establish RTMP connection to input port
+      // 2. Test HTTP access to output endpoint
       // 3. Verify server response
       
-      debugPrint('Testing connection to: ${_serverConfig.fullUrl}');
+      debugPrint('Testing connection to input: ${_streamConfig.inputUrl}');
+      debugPrint('Testing connection to output: ${_streamConfig.outputUrl}');
       
       // Simulate connection test delay
       await Future.delayed(const Duration(seconds: 1));
       
       // For now, just show success (in real implementation, implement actual connection test)
-      _showInfo('✅ Server configuration looks valid! Protocol: ${_serverConfig.protocol}, Host: ${_serverConfig.host}, Port: ${_serverConfig.port}');
+      _showInfo('✅ Server configuration looks valid!\n'
+          'Input: ${_streamConfig.inputUrl}\n'
+          'Output: ${_streamConfig.outputUrl}\n'
+          'SIM: ${_streamConfig.simNumber}');
       
     } catch (e) {
       _showError('❌ Connection test failed: $e');
@@ -75,6 +82,7 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
     _peerConnection?.dispose();
     _hostController.dispose();
     _portController.dispose();
+    _simNumberController.dispose();
     super.dispose();
   }
 
@@ -158,9 +166,10 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
 
       // In a real implementation, you would send the offer to your signaling server
       debugPrint('Offer SDP: ${offer.sdp}');
-      debugPrint('Connecting to server: ${_serverConfig.fullUrl}');
+      debugPrint('Streaming to input: ${_streamConfig.inputUrl}');
+      debugPrint('Stream will be available at: ${_streamConfig.outputUrl}');
       
-      _showInfo('Streaming started! Connecting to ${_serverConfig.fullUrl}');
+      _showInfo('Streaming started!\nSending to: ${_streamConfig.inputUrl}\nWatch at: ${_streamConfig.outputUrl}');
 
     } catch (e) {
       debugPrint('Error starting stream: $e');
@@ -235,9 +244,10 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
 
   void _showServerDialog() {
     // Reset controllers with current values
-    _hostController.text = _serverConfig.host;
-    _portController.text = _serverConfig.port.toString();
-    _selectedProtocol = _serverConfig.protocol;
+    _hostController.text = _streamConfig.inputHost;
+    _portController.text = _streamConfig.inputPort.toString();
+    _simNumberController.text = _streamConfig.simNumber;
+    _selectedProtocol = _streamConfig.protocol;
 
     showDialog(
       context: context,
@@ -302,6 +312,19 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
                     ),
                     const SizedBox(height: 16),
                     
+                    // SIM Number input (for output URL)
+                    const Text('SIM Number:', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: _simNumberController,
+                      decoration: const InputDecoration(
+                        border: OutlineInputBorder(),
+                        hintText: 'e.g., 12345, sim001',
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    
                     // Preview URL
                     Container(
                       padding: const EdgeInsets.all(12),
@@ -310,56 +333,78 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(color: Colors.grey.shade300),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text('Preview URL:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                          const SizedBox(height: 4),
-                          Text(
-                            '$_selectedProtocol://${_hostController.text.isNotEmpty ? _hostController.text : 'host'}:${_portController.text.isNotEmpty ? _portController.text : 'port'}',
-                            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
-                          ),
-                        ],
-                      ),
+                                              child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text('Preview URLs:', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                            const SizedBox(height: 4),
+                            Text(
+                              'Input: $_selectedProtocol://${_hostController.text.isNotEmpty ? _hostController.text : 'host'}:${_portController.text.isNotEmpty ? _portController.text : 'port'}',
+                              style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Output: http://${_hostController.text.isNotEmpty ? _hostController.text : 'host'}:8080/${_simNumberController.text.isNotEmpty ? _simNumberController.text : 'sim'}/1.m3u8',
+                              style: const TextStyle(fontFamily: 'monospace', fontSize: 11),
+                            ),
+                          ],
+                        ),
                     ),
                     const SizedBox(height: 16),
                     
                     // Quick presets
                     const Text('Quick Presets:', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      children: [
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            setDialogState(() {
-                              _hostController.text = 'localhost';
-                              _portController.text = '8080';
-                              _selectedProtocol = 'ws';
-                            });
-                          },
-                          icon: const Icon(Icons.computer, size: 16),
-                          label: const Text('Local:8080'),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                          Wrap(
+                        spacing: 8,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              setDialogState(() {
+                                _hostController.text = StreamConfig.inputServerIP;
+                                _portController.text = StreamConfig.inputServerPort.toString();
+                                _selectedProtocol = 'rtmp';
+                                _simNumberController.text = '12345';
+                              });
+                            },
+                            icon: const Icon(Icons.cloud, size: 16),
+                            label: const Text('Your Server'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            ),
                           ),
-                        ),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            setDialogState(() {
-                              _hostController.text = 'localhost';
-                              _portController.text = '1935';
-                              _selectedProtocol = 'rtmp';
-                            });
-                          },
-                          icon: const Icon(Icons.stream, size: 16),
-                          label: const Text('RTMP:1935'),
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              setDialogState(() {
+                                _hostController.text = 'localhost';
+                                _portController.text = '8080';
+                                _selectedProtocol = 'ws';
+                              });
+                            },
+                            icon: const Icon(Icons.computer, size: 16),
+                            label: const Text('Local:8080'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              setDialogState(() {
+                                _hostController.text = 'localhost';
+                                _portController.text = '1935';
+                                _selectedProtocol = 'rtmp';
+                              });
+                            },
+                            icon: const Icon(Icons.stream, size: 16),
+                            label: const Text('RTMP:1935'),
+                            style: ElevatedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            ),
+                          ),
+                        ],
+                      ),
                     const SizedBox(height: 16),
                     
                     const Text(
@@ -374,65 +419,74 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
                   onPressed: () => Navigator.of(context).pop(),
                   child: const Text('Cancel'),
                 ),
-                TextButton.icon(
-                  onPressed: () async {
-                    final host = _hostController.text.trim();
-                    final portText = _portController.text.trim();
-                    
-                    if (host.isEmpty || portText.isEmpty) {
-                      _showError('Please enter both host and port to test');
-                      return;
-                    }
-                    
-                    final port = int.tryParse(portText);
-                    if (port == null || port < 1 || port > 65535) {
-                      _showError('Please enter a valid port number (1-65535)');
-                      return;
-                    }
-                    
-                    // Temporarily update config for testing
-                    final tempConfig = ServerConfig(
-                      host: host,
-                      port: port,
-                      protocol: _selectedProtocol,
-                    );
-                    
-                    final oldConfig = _serverConfig;
-                    _serverConfig = tempConfig;
-                    await _testConnection();
-                    _serverConfig = oldConfig; // Restore original
-                  },
-                  icon: const Icon(Icons.network_check),
-                  label: const Text('Test'),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    final host = _hostController.text.trim();
-                    final portText = _portController.text.trim();
-                    
-                    if (host.isEmpty || portText.isEmpty) {
-                      _showError('Please enter both host and port');
-                      return;
-                    }
-                    
-                    final port = int.tryParse(portText);
-                    if (port == null || port < 1 || port > 65535) {
-                      _showError('Please enter a valid port number (1-65535)');
-                      return;
-                    }
-                    
-                    setState(() {
-                      _serverConfig = ServerConfig(
-                        host: host,
-                        port: port,
+                                  TextButton.icon(
+                    onPressed: () async {
+                      final host = _hostController.text.trim();
+                      final portText = _portController.text.trim();
+                      final simNumber = _simNumberController.text.trim();
+                      
+                      if (host.isEmpty || portText.isEmpty) {
+                        _showError('Please enter both host and port to test');
+                        return;
+                      }
+                      
+                      final port = int.tryParse(portText);
+                      if (port == null || port < 1 || port > 65535) {
+                        _showError('Please enter a valid port number (1-65535)');
+                        return;
+                      }
+                      
+                      // Temporarily update config for testing
+                      final tempStreamConfig = StreamConfig(
+                        inputHost: host,
+                        inputPort: port,
                         protocol: _selectedProtocol,
+                        simNumber: simNumber.isNotEmpty ? simNumber : '12345',
                       );
-                    });
-                    Navigator.of(context).pop();
-                    _showInfo('Server configuration updated: ${_serverConfig.fullUrl}');
-                  },
-                  child: const Text('Save'),
-                ),
+                      
+                      final oldStreamConfig = _streamConfig;
+                      _streamConfig = tempStreamConfig;
+                      await _testConnection();
+                      _streamConfig = oldStreamConfig; // Restore original
+                    },
+                    icon: const Icon(Icons.network_check),
+                    label: const Text('Test'),
+                  ),
+                                  ElevatedButton(
+                    onPressed: () {
+                      final host = _hostController.text.trim();
+                      final portText = _portController.text.trim();
+                      final simNumber = _simNumberController.text.trim();
+                      
+                      if (host.isEmpty || portText.isEmpty) {
+                        _showError('Please enter both host and port');
+                        return;
+                      }
+                      
+                      if (simNumber.isEmpty) {
+                        _showError('Please enter a SIM number');
+                        return;
+                      }
+                      
+                      final port = int.tryParse(portText);
+                      if (port == null || port < 1 || port > 65535) {
+                        _showError('Please enter a valid port number (1-65535)');
+                        return;
+                      }
+                      
+                      setState(() {
+                        _streamConfig = StreamConfig(
+                          inputHost: host,
+                          inputPort: port,
+                          protocol: _selectedProtocol,
+                          simNumber: simNumber,
+                        );
+                      });
+                      Navigator.of(context).pop();
+                      _showInfo('Server configuration updated!\nInput: ${_streamConfig.inputUrl}\nOutput: ${_streamConfig.outputUrl}');
+                    },
+                    child: const Text('Save'),
+                  ),
               ],
             );
           },
@@ -510,9 +564,18 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 _buildStatusIndicator(),
-                Text(
-                  'Server: ${_serverConfig.displayUrl}',
-                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      'Input: ${_streamConfig.inputDisplayUrl}',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                    Text(
+                      'Output: ${_streamConfig.outputDisplayUrl}',
+                      style: const TextStyle(fontSize: 11, color: Colors.grey),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -638,6 +701,56 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
                         color: Colors.blue,
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 16),
+                  // Stream output info
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.green.shade50,
+                      border: Border.all(color: Colors.green.shade300),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Icon(Icons.play_circle, color: Colors.green.shade700),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Text(
+                                'Stream Output Available',
+                                style: TextStyle(
+                                  color: Colors.green.shade700,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _streamConfig.outputUrl,
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        ElevatedButton.icon(
+                          onPressed: () {
+                            _showInfo('Open this URL in a browser or media player:\n${_streamConfig.outputUrl}');
+                          },
+                          icon: const Icon(Icons.open_in_browser),
+                          label: const Text('Copy Output URL'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ],
