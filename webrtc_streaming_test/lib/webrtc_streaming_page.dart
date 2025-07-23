@@ -135,8 +135,6 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
             ),
           ),
           actions: [
-          ],
-          actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('Close'),

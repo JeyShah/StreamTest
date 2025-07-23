@@ -67,7 +67,7 @@ class _HomePageState extends State<HomePage> {
       }
     } catch (e) {
       // Handle unexpected platform issues
-      print('Permission check failed: $e');
+      debugPrint('Permission check failed: $e');
       setState(() {
         _permissionsGranted = true; // Fallback to allow app to continue
       });
