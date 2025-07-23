@@ -86,13 +86,7 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
     try {
       _showInfo('🔍 Testing server connectivity...');
       
-      final results = await ConnectionTester.testServerConnectivity(
-        inputHost: _streamConfig.inputHost,
-        inputPort: _streamConfig.inputPort,
-        outputHost: _streamConfig.outputHost,
-        outputPort: _streamConfig.outputPort,
-        simNumber: _streamConfig.simNumber,
-      );
+      final results = await ConnectionTester.testServerConnectivity(_streamConfig);
       
       _showConnectionTestResults(results);
       
@@ -106,83 +100,42 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Row(
+          title: const Row(
             children: [
-              Icon(
-                Icons.network_check,
-                color: ConnectionTester.getStatusColor(results['overall']['status']),
-              ),
-              const SizedBox(width: 8),
-              const Text('Connection Test Results'),
+              Icon(Icons.network_check, color: Colors.blue),
+              SizedBox(width: 8),
+              Text('Connection Diagnostics'),
             ],
           ),
           content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Overall Status
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: ConnectionTester.getStatusColor(results['overall']['status']).withOpacity(0.1),
-                    border: Border.all(color: ConnectionTester.getStatusColor(results['overall']['status'])),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
-                    children: [
-                      Text(
-                        ConnectionTester.getStatusIcon(results['overall']['status']),
-                        style: const TextStyle(fontSize: 20),
+            child: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Show formatted report
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: SelectableText(
+                      ConnectionTester.formatResults(results),
+                      style: const TextStyle(
+                        fontFamily: 'monospace',
+                        fontSize: 12,
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          results['overall']['message'],
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            color: ConnectionTester.getStatusColor(results['overall']['status']),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
                 
-                // Individual Test Results
-                _buildTestResult('Input Server (${_streamConfig.inputHost}:${_streamConfig.inputPort})', results['inputServer']),
-                _buildTestResult('Output Server (${_streamConfig.outputHost}:${_streamConfig.outputPort})', results['outputServer']),
-                _buildTestResult('Stream URL (${_streamConfig.simNumber}/1.m3u8)', results['outputStream']),
-                
-                const SizedBox(height: 16),
-                
-                // Troubleshooting Tips
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    border: Border.all(color: Colors.blue.shade300),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        '💡 Troubleshooting Tips:',
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text('• Input server should accept RTMP streams on port 1078'),
-                      const Text('• Output server should serve HLS streams on port 8080'),
-                      const Text('• Stream URL will be 404 until you start streaming'),
-                      const Text('• Check firewall settings if connections fail'),
-                    ],
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
+          actions: [
+          ],
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
@@ -201,39 +154,7 @@ class _WebRTCStreamingPageState extends State<WebRTCStreamingPage> {
     );
   }
 
-  Widget _buildTestResult(String title, Map<String, dynamic> result) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            ConnectionTester.getStatusIcon(result['status']),
-            style: const TextStyle(fontSize: 16),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  result['message'],
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: ConnectionTester.getStatusColor(result['status']),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+
 
   void _showDebugInfo() {
     showDialog(

@@ -1,242 +1,327 @@
-import 'dart:io';
 import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:web_socket_channel/status.dart' as status;
+import 'stream_config.dart';
 
 class ConnectionTester {
-  static Future<Map<String, dynamic>> testServerConnectivity({
-    required String inputHost,
-    required int inputPort,
-    required String outputHost,
-    required int outputPort,
-    required String simNumber,
-  }) async {
-    Map<String, dynamic> results = {
-      'inputServer': {'status': 'testing', 'message': ''},
-      'outputServer': {'status': 'testing', 'message': ''},
-      'outputStream': {'status': 'testing', 'message': ''},
-      'overall': {'status': 'testing', 'message': ''},
+  static Future<Map<String, dynamic>> testServerConnectivity(StreamConfig config) async {
+    final results = <String, dynamic>{
+      'timestamp': DateTime.now().toIso8601String(),
+      'config': {
+        'inputHost': config.inputHost,
+        'inputPort': config.inputPort,
+        'outputHost': config.outputHost,
+        'outputPort': config.outputPort,
+        'simNumber': config.simNumber,
+        'webrtcUrl': config.webrtcSignalingUrl,
+        'outputUrl': config.outputUrl,
+      },
+      'tests': <String, dynamic>{},
+      'recommendations': <String>[],
     };
 
-    try {
-      // Test 1: Input Server Connectivity (Port Check)
-      debugPrint('🔍 Testing input server connectivity...');
-      results['inputServer'] = await _testInputServer(inputHost, inputPort);
+    // Test 1: Basic HTTP connectivity to input server
+    await _testHttpConnectivity(
+      config.inputHost, 
+      config.inputPort, 
+      'Input Server HTTP', 
+      results['tests']
+    );
 
-      // Test 2: Output Server Connectivity (HTTP Check)
-      debugPrint('🔍 Testing output server connectivity...');
-      results['outputServer'] = await _testOutputServer(outputHost, outputPort);
+    // Test 2: Basic HTTP connectivity to output server
+    await _testHttpConnectivity(
+      config.outputHost, 
+      config.outputPort, 
+      'Output Server HTTP', 
+      results['tests']
+    );
 
-      // Test 3: Specific Stream URL Check
-      debugPrint('🔍 Testing stream output URL...');
-      results['outputStream'] = await _testStreamUrl(outputHost, outputPort, simNumber);
+    // Test 3: WebSocket connectivity test
+    await _testWebSocketConnectivity(config, results['tests']);
 
-      // Overall assessment
-      results['overall'] = _assessOverallStatus(results);
+    // Test 4: Check for alternative ports
+    await _testAlternativePorts(config, results['tests']);
 
-    } catch (e) {
-      debugPrint('❌ Error during connectivity test: $e');
-      results['overall'] = {
-        'status': 'error',
-        'message': 'Test failed with error: $e'
-      };
-    }
+    // Test 5: Check if RTMP might be expected instead
+    await _testRTMPConnectivity(config, results['tests']);
+
+    // Generate recommendations
+    _generateRecommendations(results);
 
     return results;
   }
 
-  static Future<Map<String, dynamic>> _testInputServer(String host, int port) async {
+  static Future<void> _testHttpConnectivity(
+    String host, 
+    int port, 
+    String testName, 
+    Map<String, dynamic> tests
+  ) async {
+    final test = {
+      'status': 'testing',
+      'startTime': DateTime.now().toIso8601String(),
+    };
+    tests[testName] = test;
+
     try {
-      debugPrint('📡 Testing TCP connection to $host:$port...');
+      final client = HttpClient();
+      client.connectionTimeout = const Duration(seconds: 5);
       
-      // Try to establish a TCP connection to the input port
-      Socket? socket;
-      try {
-        socket = await Socket.connect(host, port, timeout: const Duration(seconds: 5));
-        await socket.close();
-        
-        return {
-          'status': 'success',
-          'message': '✅ Input server ($host:$port) is reachable and accepting connections'
-        };
-      } on SocketException catch (e) {
-        String errorMsg = '';
-        if (e.osError?.errorCode == 111 || e.osError?.errorCode == 10061) {
-          errorMsg = '❌ Connection refused - Server may not be running on port $port';
-        } else if (e.osError?.errorCode == 113 || e.osError?.errorCode == 10060) {
-          errorMsg = '❌ Connection timeout - Server may be unreachable or firewalled';
-        } else {
-          errorMsg = '❌ Connection failed: ${e.message}';
+      final request = await client.openUrl('GET', Uri.parse('http://$host:$port'));
+      final response = await request.close();
+      
+      test['status'] = 'success';
+      test['httpStatus'] = response.statusCode;
+      test['headers'] = <String, String>{};
+      response.headers.forEach((name, values) {
+        test['headers'][name] = values.join(', ');
+      });
+      
+      client.close();
+    } catch (e) {
+      test['status'] = 'failed';
+      test['error'] = e.toString();
+    }
+    
+    test['endTime'] = DateTime.now().toIso8601String();
+  }
+
+  static Future<void> _testWebSocketConnectivity(
+    StreamConfig config, 
+    Map<String, dynamic> tests
+  ) async {
+    final test = {
+      'status': 'testing',
+      'startTime': DateTime.now().toIso8601String(),
+      'url': config.webrtcSignalingUrl,
+    };
+    tests['WebSocket Connection'] = test;
+
+    try {
+      final uri = Uri.parse(config.webrtcSignalingUrl);
+      test['parsedUri'] = uri.toString();
+      test['scheme'] = uri.scheme;
+      test['host'] = uri.host;
+      test['port'] = uri.port;
+      test['path'] = uri.path;
+
+      // Attempt WebSocket connection with timeout
+      final channel = WebSocketChannel.connect(uri);
+      
+      // Set up a timer for timeout
+      bool completed = false;
+      Timer(const Duration(seconds: 10), () {
+        if (!completed) {
+          test['status'] = 'timeout';
+          test['error'] = 'WebSocket connection timed out after 10 seconds';
+          channel.sink.close(status.normalClosure);
         }
-        
-        return {
-          'status': 'failed',
-          'message': errorMsg
-        };
-      } finally {
-        socket?.close();
-      }
-    } catch (e) {
-      return {
-        'status': 'error',
-        'message': '❌ Error testing input server: $e'
-      };
-    }
-  }
+      });
 
-  static Future<Map<String, dynamic>> _testOutputServer(String host, int port) async {
-    try {
-      debugPrint('🌐 Testing HTTP connection to $host:$port...');
+      // Try to establish connection
+      await channel.ready.timeout(const Duration(seconds: 10));
       
-      final response = await http.get(
-        Uri.parse('http://$host:$port/'),
-        headers: {'User-Agent': 'Flutter-WebRTC-Tester'},
-      ).timeout(const Duration(seconds: 10));
-
-      if (response.statusCode >= 200 && response.statusCode < 300) {
-        return {
-          'status': 'success',
-          'message': '✅ Output server ($host:$port) is accessible (HTTP ${response.statusCode})'
-        };
+      completed = true;
+      test['status'] = 'success';
+      test['message'] = 'WebSocket connection established successfully';
+      
+      // Send a test message
+      channel.sink.add(jsonEncode({
+        'type': 'test',
+        'simNumber': config.simNumber,
+        'timestamp': DateTime.now().millisecondsSinceEpoch,
+      }));
+      
+      // Close the connection
+      await channel.sink.close(status.normalClosure);
+      
+    } catch (e) {
+      test['status'] = 'failed';
+      test['error'] = e.toString();
+      
+      // Analyze the error type
+      if (e.toString().contains('Connection refused')) {
+        test['errorType'] = 'connection_refused';
+        test['diagnosis'] = 'Server is not accepting connections on port ${config.inputPort}';
+      } else if (e.toString().contains('Failed to connect WebSocket')) {
+        test['errorType'] = 'websocket_handshake_failed';
+        test['diagnosis'] = 'Server does not support WebSocket protocol';
+      } else if (e.toString().contains('Empty reply from server')) {
+        test['errorType'] = 'no_response';
+        test['diagnosis'] = 'Server is not running WebSocket service on this port';
       } else {
-        return {
-          'status': 'warning',
-          'message': '⚠️ Output server responded with HTTP ${response.statusCode} - may still work for streaming'
-        };
+        test['errorType'] = 'unknown';
+        test['diagnosis'] = 'Unknown WebSocket connection error';
       }
-    } on TimeoutException {
-      return {
-        'status': 'failed',
-        'message': '❌ Output server timeout - Server may not be running on port $port'
-      };
-    } on SocketException catch (e) {
-      return {
-        'status': 'failed',
-        'message': '❌ Cannot reach output server: ${e.message}'
-      };
-    } catch (e) {
-      return {
-        'status': 'warning',
-        'message': '⚠️ Output server test inconclusive: $e'
-      };
+    }
+    
+    test['endTime'] = DateTime.now().toIso8601String();
+  }
+
+  static Future<void> _testAlternativePorts(
+    StreamConfig config, 
+    Map<String, dynamic> tests
+  ) async {
+    final alternativePorts = [8080, 9000, 3000, 4000, 5000];
+    
+    for (final port in alternativePorts) {
+      if (port == config.inputPort) continue; // Skip the port we already tested
+      
+      final testName = 'Alternative Port $port';
+      await _testHttpConnectivity(config.inputHost, port, testName, tests);
     }
   }
 
-  static Future<Map<String, dynamic>> _testStreamUrl(String host, int port, String simNumber) async {
-    try {
-      debugPrint('📺 Testing stream URL for SIM: $simNumber...');
-      
-      final streamUrl = 'http://$host:$port/$simNumber/1.m3u8';
-      final response = await http.head(
-        Uri.parse(streamUrl),
-        headers: {'User-Agent': 'Flutter-WebRTC-Tester'},
-      ).timeout(const Duration(seconds: 10));
+  static Future<void> _testRTMPConnectivity(
+    StreamConfig config, 
+    Map<String, dynamic> tests
+  ) async {
+    final test = {
+      'status': 'testing',
+      'startTime': DateTime.now().toIso8601String(),
+    };
+    tests['RTMP Server Check'] = test;
 
-      if (response.statusCode == 200) {
-        final contentType = response.headers['content-type'] ?? '';
-        if (contentType.contains('application/vnd.apple.mpegurl') || 
-            contentType.contains('application/x-mpegurl') ||
-            contentType.contains('text/plain')) {
-          return {
-            'status': 'success',
-            'message': '✅ Stream URL exists and returns HLS playlist'
-          };
-        } else {
-          return {
-            'status': 'warning',
-            'message': '⚠️ Stream URL accessible but content type may be incorrect: $contentType'
-          };
+    try {
+      // Test RTMP port (usually 1935)
+      final socket = await Socket.connect(config.inputHost, 1935, timeout: const Duration(seconds: 5));
+      socket.destroy();
+      
+      test['status'] = 'success';
+      test['message'] = 'RTMP port (1935) is accessible';
+      test['recommendation'] = 'Your server might expect RTMP instead of WebRTC';
+    } catch (e) {
+      test['status'] = 'failed';
+      test['error'] = e.toString();
+      test['message'] = 'RTMP port (1935) is not accessible';
+    }
+    
+    test['endTime'] = DateTime.now().toIso8601String();
+  }
+
+  static void _generateRecommendations(Map<String, dynamic> results) {
+    final tests = results['tests'] as Map<String, dynamic>;
+    final recommendations = results['recommendations'] as List<String>;
+    
+    final wsTest = tests['WebSocket Connection'];
+    final inputHttpTest = tests['Input Server HTTP'];
+    final outputHttpTest = tests['Output Server HTTP'];
+    final rtmpTest = tests['RTMP Server Check'];
+
+    // WebSocket specific recommendations
+    if (wsTest['status'] == 'failed') {
+      if (wsTest['errorType'] == 'connection_refused') {
+        recommendations.add('❌ Server is not accepting connections on port ${results['config']['inputPort']}');
+        recommendations.add('💡 Check if your WebSocket server is running');
+        recommendations.add('💡 Verify firewall settings allow port ${results['config']['inputPort']}');
+      } else if (wsTest['errorType'] == 'websocket_handshake_failed') {
+        recommendations.add('❌ Server does not support WebSocket protocol');
+        recommendations.add('💡 Your server might expect regular HTTP instead of WebSocket');
+        recommendations.add('💡 Check if server supports WebSocket upgrade headers');
+      } else if (wsTest['errorType'] == 'no_response') {
+        recommendations.add('❌ No WebSocket service running on port ${results['config']['inputPort']}');
+        recommendations.add('💡 Server might be running a different service (HTTP, RTMP, etc.)');
+      }
+    }
+
+    // HTTP connectivity recommendations
+    if (inputHttpTest['status'] == 'success') {
+      recommendations.add('✅ Input server is reachable via HTTP');
+      if (wsTest['status'] == 'failed') {
+        recommendations.add('💡 Try using HTTP API instead of WebSocket for media streaming');
+      }
+    }
+
+    if (outputHttpTest['status'] == 'success') {
+      recommendations.add('✅ Output server is reachable and responding');
+    }
+
+    // RTMP recommendations
+    if (rtmpTest['status'] == 'success') {
+      recommendations.add('✅ RTMP port is accessible - server might expect RTMP protocol');
+      recommendations.add('💡 Consider switching to RTMP streaming instead of WebRTC');
+    }
+
+    // Alternative port recommendations
+    final alternativeWorkingPorts = <int>[];
+    tests.forEach((testName, testResult) {
+      if (testName.startsWith('Alternative Port') && testResult['status'] == 'success') {
+        final port = int.tryParse(testName.replaceAll('Alternative Port ', ''));
+        if (port != null) {
+          alternativeWorkingPorts.add(port);
         }
-      } else if (response.statusCode == 404) {
-        return {
-          'status': 'info',
-          'message': '📡 Stream URL not found (404) - This is normal if no stream is currently active'
-        };
-      } else {
-        return {
-          'status': 'warning',
-          'message': '⚠️ Stream URL returned HTTP ${response.statusCode}'
-        };
       }
-    } on TimeoutException {
-      return {
-        'status': 'failed',
-        'message': '❌ Stream URL timeout'
-      };
-    } catch (e) {
-      return {
-        'status': 'info',
-        'message': '📡 Stream URL test inconclusive (this is normal if no active stream): $e'
-      };
+    });
+
+    if (alternativeWorkingPorts.isNotEmpty) {
+      recommendations.add('✅ Alternative ports available: ${alternativeWorkingPorts.join(', ')}');
+      recommendations.add('💡 Try using one of these ports instead of ${results['config']['inputPort']}');
+    }
+
+    // Overall recommendations
+    if (wsTest['status'] == 'failed' && inputHttpTest['status'] == 'success') {
+      recommendations.add('');
+      recommendations.add('🔧 SUGGESTED SOLUTIONS:');
+      recommendations.add('1. Check if your server supports WebSocket connections');
+      recommendations.add('2. Verify server expects WebSocket on port ${results['config']['inputPort']}');
+      recommendations.add('3. Consider implementing HTTP-based streaming instead');
+      recommendations.add('4. Check server documentation for correct protocol');
     }
   }
 
-  static Map<String, dynamic> _assessOverallStatus(Map<String, dynamic> results) {
-    final inputStatus = results['inputServer']['status'];
-    final outputStatus = results['outputServer']['status'];
-
-    if (inputStatus == 'success' && (outputStatus == 'success' || outputStatus == 'warning')) {
-      return {
-        'status': 'ready',
-        'message': '🎯 Server connectivity looks good! Ready for streaming.'
-      };
-    } else if (inputStatus == 'failed') {
-      return {
-        'status': 'input_failed',
-        'message': '❌ Cannot connect to input server. Check if streaming server is running on port 1078.'
-      };
-    } else if (outputStatus == 'failed') {
-      return {
-        'status': 'output_failed',
-        'message': '❌ Cannot connect to output server. Check if web server is running on port 8080.'
-      };
-    } else {
-      return {
-        'status': 'partial',
-        'message': '⚠️ Some connectivity issues detected. Streaming may work but with limitations.'
-      };
+  static String formatResults(Map<String, dynamic> results) {
+    final buffer = StringBuffer();
+    
+    buffer.writeln('🔍 CONNECTION DIAGNOSTICS REPORT');
+    buffer.writeln('=' * 50);
+    buffer.writeln('Timestamp: ${results['timestamp']}');
+    buffer.writeln();
+    
+    // Configuration
+    buffer.writeln('📋 CONFIGURATION:');
+    final config = results['config'];
+    buffer.writeln('• Input Server: ${config['inputHost']}:${config['inputPort']}');
+    buffer.writeln('• Output Server: ${config['outputHost']}:${config['outputPort']}');
+    buffer.writeln('• SIM Number: ${config['simNumber']}');
+    buffer.writeln('• WebSocket URL: ${config['webrtcUrl']}');
+    buffer.writeln('• Output URL: ${config['outputUrl']}');
+    buffer.writeln();
+    
+    // Test Results
+    buffer.writeln('🧪 TEST RESULTS:');
+    final tests = results['tests'] as Map<String, dynamic>;
+    tests.forEach((testName, testResult) {
+      final status = testResult['status'];
+      final emoji = status == 'success' ? '✅' : status == 'failed' ? '❌' : '⏳';
+      buffer.writeln('$emoji $testName: ${status.toUpperCase()}');
+      
+      if (testResult['error'] != null) {
+        buffer.writeln('   Error: ${testResult['error']}');
+      }
+      if (testResult['diagnosis'] != null) {
+        buffer.writeln('   Diagnosis: ${testResult['diagnosis']}');
+      }
+      if (testResult['message'] != null) {
+        buffer.writeln('   ${testResult['message']}');
+      }
+    });
+    buffer.writeln();
+    
+    // Recommendations
+    buffer.writeln('💡 RECOMMENDATIONS:');
+    final recommendations = results['recommendations'] as List<String>;
+    for (final recommendation in recommendations) {
+      if (recommendation.isEmpty) {
+        buffer.writeln();
+      } else {
+        buffer.writeln('   $recommendation');
+      }
     }
-  }
-
-  static String getStatusIcon(String status) {
-    switch (status) {
-      case 'success':
-      case 'ready':
-        return '✅';
-      case 'warning':
-      case 'partial':
-        return '⚠️';
-      case 'failed':
-      case 'input_failed':
-      case 'output_failed':
-        return '❌';
-      case 'info':
-        return '📡';
-      case 'testing':
-        return '🔍';
-      default:
-        return '❓';
-    }
-  }
-
-  static Color getStatusColor(String status) {
-    switch (status) {
-      case 'success':
-      case 'ready':
-        return Colors.green;
-      case 'warning':
-      case 'partial':
-        return Colors.orange;
-      case 'failed':
-      case 'input_failed':
-      case 'output_failed':
-        return Colors.red;
-      case 'info':
-        return Colors.blue;
-      case 'testing':
-        return Colors.grey;
-      default:
-        return Colors.grey;
-    }
+    
+    return buffer.toString();
   }
 }
