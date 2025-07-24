@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
+import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 
 void main() {
   runApp(const HLSVideoPlayerApp());
@@ -32,10 +33,12 @@ class VideoPlayerScreen extends StatefulWidget {
 class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   final TextEditingController _urlController = TextEditingController();
   VideoPlayerController? _videoPlayerController;
+  VlcPlayerController? _vlcPlayerController;
   bool _isLoading = false;
   bool _isPlaying = false;
   String? _errorMessage;
   bool _showControls = true;
+  bool _useVlcPlayer = true;
 
   @override
   void initState() {
@@ -47,6 +50,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   @override
   void dispose() {
     _videoPlayerController?.dispose();
+    _vlcPlayerController?.dispose();
     _urlController.dispose();
     super.dispose();
   }
@@ -65,30 +69,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     });
 
     try {
-      // Dispose of previous controller
-      await _videoPlayerController?.dispose();
-
-      // Create new video player controller
-      _videoPlayerController = VideoPlayerController.networkUrl(
-        Uri.parse(url),
-        httpHeaders: {
-          'User-Agent': 'HLS Video Player Flutter App',
-        },
-      );
-
-      // Add listener for player state changes
-      _videoPlayerController!.addListener(_videoPlayerListener);
-
-      // Initialize the video player
-      await _videoPlayerController!.initialize();
-
-      // Start playing
-      await _videoPlayerController!.play();
-
-      setState(() {
-        _isLoading = false;
-        _isPlaying = true;
-      });
+      if (_useVlcPlayer && !kIsWeb) {
+        // Use VLC player for better HLS support on mobile/desktop
+        await _playWithVlc(url);
+      } else {
+        // Use video_player for web or as fallback
+        await _playWithVideoPlayer(url);
+      }
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -111,6 +98,85 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       
       _showError(errorMessage);
     }
+  }
+
+  Future<void> _playWithVlc(String url) async {
+    // Dispose of previous controllers
+    await _videoPlayerController?.dispose();
+    _vlcPlayerController?.dispose();
+    
+    setState(() {
+      _videoPlayerController = null;
+    });
+
+    // Create VLC player controller
+    _vlcPlayerController = VlcPlayerController.network(
+      url,
+      hwAcc: HwAcc.full,
+      autoPlay: true,
+      options: VlcPlayerOptions(
+        advanced: VlcAdvancedOptions([
+          VlcAdvancedOptions.networkCaching(2000),
+          VlcAdvancedOptions.clockJitter(0),
+        ]),
+        video: VlcVideoOptions([
+          VlcVideoOptions.dropLateFrames(true),
+          VlcVideoOptions.skipFrames(true),
+        ]),
+        sout: VlcStreamOutputOptions([
+          VlcStreamOutputOptions.soutMuxCaching(2000),
+        ]),
+        rtp: VlcRtpOptions([
+          VlcRtpOptions.rtpOverRtsp(true),
+        ]),
+      ),
+    );
+
+    // Add listeners
+    _vlcPlayerController!.addOnInitListener(() async {
+      setState(() {
+        _isLoading = false;
+        _isPlaying = true;
+      });
+    });
+
+    _vlcPlayerController!.addOnRendererEventListener((type, id, name) {
+      // Renderer event listener for debugging
+    });
+
+    await _vlcPlayerController!.initialize();
+  }
+
+  Future<void> _playWithVideoPlayer(String url) async {
+    // Dispose of previous controllers
+    await _videoPlayerController?.dispose();
+    _vlcPlayerController?.dispose();
+    
+    setState(() {
+      _vlcPlayerController = null;
+    });
+
+    // Create video player controller
+    _videoPlayerController = VideoPlayerController.networkUrl(
+      Uri.parse(url),
+      httpHeaders: {
+        'User-Agent': 'HLS Video Player Flutter App',
+      },
+    );
+
+    // Add listener for player state changes
+    _videoPlayerController!.addListener(_videoPlayerListener);
+
+    // Initialize the video player
+    await _videoPlayerController!.initialize();
+
+    // Start playing
+    await _videoPlayerController!.play();
+
+    setState(() {
+      _isLoading = false;
+      _isPlaying = true;
+    });
   }
 
   void _videoPlayerListener() {
@@ -136,15 +202,27 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   void _stopVideo() {
     _videoPlayerController?.pause();
     _videoPlayerController?.dispose();
+    _vlcPlayerController?.stop();
+    _vlcPlayerController?.dispose();
     setState(() {
       _videoPlayerController = null;
+      _vlcPlayerController = null;
       _isPlaying = false;
       _errorMessage = null;
     });
   }
 
   void _togglePlayPause() {
-    if (_videoPlayerController != null) {
+    if (_vlcPlayerController != null) {
+      if (_isPlaying) {
+        _vlcPlayerController!.pause();
+      } else {
+        _vlcPlayerController!.play();
+      }
+      setState(() {
+        _isPlaying = !_isPlaying;
+      });
+    } else if (_videoPlayerController != null) {
       if (_videoPlayerController!.value.isPlaying) {
         _videoPlayerController!.pause();
       } else {
@@ -154,7 +232,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   void _toggleMute() {
-    if (_videoPlayerController != null) {
+    if (_vlcPlayerController != null) {
+      _vlcPlayerController!.getVolume().then((volume) {
+        final currentVolume = volume ?? 0;
+        _vlcPlayerController!.setVolume(currentVolume > 0 ? 0 : 100);
+      });
+    } else if (_videoPlayerController != null) {
       final currentVolume = _videoPlayerController!.value.volume;
       _videoPlayerController!.setVolume(currentVolume > 0 ? 0.0 : 1.0);
       setState(() {});
@@ -266,10 +349,34 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                             backgroundColor: Colors.red,
                             foregroundColor: Colors.white,
                           ),
+                                                  ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      // Player selection
+                      if (!kIsWeb) ...[
+                        Row(
+                          children: [
+                            Text(
+                              'Player: ',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            Switch(
+                              value: _useVlcPlayer,
+                              onChanged: (value) {
+                                setState(() {
+                                  _useVlcPlayer = value;
+                                });
+                              },
+                            ),
+                            Text(
+                              _useVlcPlayer ? 'VLC (Better HLS)' : 'Standard',
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                          ],
                         ),
                       ],
-                    ),
-                  ],
+                    ],
                 ),
               ),
             ),
@@ -351,6 +458,102 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
 
     
 
+    // VLC Player
+    if (_vlcPlayerController != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(8),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            VlcPlayer(
+              controller: _vlcPlayerController!,
+              aspectRatio: 16 / 9,
+              placeholder: const Center(
+                child: CircularProgressIndicator(),
+              ),
+            ),
+            // Custom controls overlay for VLC
+            if (_showControls)
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        Colors.black.withOpacity(0.3),
+                        Colors.transparent,
+                        Colors.transparent,
+                        Colors.black.withOpacity(0.3),
+                      ],
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      // Control buttons for VLC
+                      Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: Row(
+                          children: [
+                            IconButton(
+                              onPressed: _togglePlayPause,
+                              icon: Icon(
+                                _isPlaying ? Icons.pause : Icons.play_arrow,
+                                color: Colors.white,
+                                size: 32,
+                              ),
+                            ),
+                            IconButton(
+                              onPressed: _toggleMute,
+                              icon: const Icon(
+                                Icons.volume_up,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            const Text(
+                              'VLC Player',
+                              style: TextStyle(color: Colors.white70),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              onPressed: () {
+                                setState(() {
+                                  _showControls = !_showControls;
+                                });
+                              },
+                              icon: const Icon(
+                                Icons.settings,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            // Tap to toggle controls
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _showControls = !_showControls;
+                });
+              },
+              child: Container(
+                color: Colors.transparent,
+                width: double.infinity,
+                height: double.infinity,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // Standard Video Player
     if (_videoPlayerController != null && _videoPlayerController!.value.isInitialized) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(8),
