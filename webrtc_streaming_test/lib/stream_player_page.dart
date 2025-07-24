@@ -246,16 +246,22 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
   }
 
   Future<void> _playStream({bool skipTest = false}) async {
+    print('🎬 _playStream called with URL: ${_urlController.text}');
+    
     final url = _urlController.text.trim();
     if (url.isEmpty) {
+      print('❌ URL is empty');
       _showMessage('Please enter a stream URL');
       return;
     }
 
     if (_isPlaying) {
+      print('🛑 Already playing, stopping stream');
       await _stopStream();
       return;
     }
+
+    print('▶️ Starting to play stream: $url');
 
     setState(() {
       _isLoading = true;
@@ -287,11 +293,15 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
       _videoController!.addListener(_videoPlayerListener);
 
       // Initialize the controller
+      print('🔄 Initializing video controller...');
       await _videoController!.initialize();
+      print('✅ Video controller initialized successfully');
 
       // Start playing
+      print('▶️ Starting video playback...');
       await _videoController!.play();
       await _videoController!.setVolume(_volume);
+      print('🔊 Volume set to $_volume');
 
       setState(() {
         _isLoading = false;
@@ -299,6 +309,7 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
         _playerStatus = 'Playing stream 🎬';
       });
 
+      print('✅ Stream started successfully!');
       _showMessage('Stream started successfully!');
 
     } catch (e) {
@@ -939,6 +950,12 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
                 ),
                 
                 _buildPresetTile(
+                  '🎬 Simple Test Video',
+                  'https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4',
+                  'Simple test video (guaranteed to work)',
+                ),
+                
+                _buildPresetTile(
                   '📡 Local RTMP',
                   'rtmp://localhost/live/stream',
                   'Local RTMP server stream',
@@ -1100,7 +1117,42 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
               ),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(12),
-                child: _buildVideoPlayer(),
+                child: Stack(
+                  children: [
+                    _buildVideoPlayer(),
+                    // Overlay play button when not playing
+                    if (!_isPlaying && !_isLoading && !_hasError)
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.black.withOpacity(0.3),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Center(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                print('🎬 Overlay play button pressed!');
+                                _playStream();
+                              },
+                              icon: const Icon(Icons.play_arrow, size: 32),
+                              label: const Text(
+                                'PLAY STREAM',
+                                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                              ),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(25),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
               ),
             ),
             
@@ -1111,6 +1163,26 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
               _buildVideoControls(),
               const SizedBox(height: 16),
             ],
+            
+            // Quick Test Button
+            Center(
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  print('🧪 Test button pressed - setting test URL');
+                  _urlController.text = 'https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4';
+                  _showMessage('Test URL loaded - now tap PLAY STREAM button!');
+                },
+                icon: const Icon(Icons.science),
+                label: const Text('Load Test Video'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 16),
             
             // Action Buttons
             Row(
@@ -1130,7 +1202,12 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
                 const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _isLoading ? null : _playStream,
+                    onPressed: _isLoading 
+                        ? null 
+                        : () {
+                            print('🎬 Play button pressed! isPlaying: $_isPlaying, isLoading: $_isLoading');
+                            _playStream();
+                          },
                     icon: _isLoading 
                         ? const SizedBox(
                             width: 16, 
@@ -1138,11 +1215,12 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
                             child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)
                           )
                         : Icon(_isPlaying ? Icons.stop : Icons.play_arrow),
-                    label: Text(_isLoading ? 'Loading...' : (_isPlaying ? 'Stop' : 'Play')),
+                    label: Text(_isLoading ? 'Loading...' : (_isPlaying ? 'Stop' : 'Play Stream')),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _isPlaying ? Colors.red : Colors.green,
                       foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
