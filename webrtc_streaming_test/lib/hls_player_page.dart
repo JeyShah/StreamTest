@@ -19,7 +19,7 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
   void initState() {
     super.initState();
     // Pre-fill with your HLS stream URL
-    _urlController.text = 'http://47.130.109.65:8080/hls/mystream.m3u8';
+    _urlController.text = 'http://47.130.109.65:8080/hls/stream.m3u8';
   }
 
   @override
@@ -72,7 +72,14 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
         _isPlaying = false;
         _status = 'Error: ${e.toString()}';
       });
-      _showMessage('Failed to load stream: $e');
+
+      // Check for iOS ATS error specifically
+      if (e.toString().contains('App Transport Security') || 
+          e.toString().contains('kCFErrorDomainCFNetwork error -1022')) {
+        _showATSErrorDialog(url);
+      } else {
+        _showMessage('Failed to load stream: $e');
+      }
     }
   }
 
@@ -90,6 +97,110 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
   void _showMessage(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message)),
+    );
+  }
+
+  void _showATSErrorDialog(String url) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.security, color: Colors.red),
+              SizedBox(width: 8),
+              Text('iOS Security Block'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: const Text(
+                    '🚫 iOS is blocking HTTP connections due to App Transport Security (ATS)',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                const Text('🔧 Solution:'),
+                const SizedBox(height: 8),
+                const Text('1. ATS configuration has been added to Info.plist'),
+                const Text('2. You need to clean and rebuild the app'),
+                const Text('3. Run these commands in terminal:'),
+                
+                const SizedBox(height: 12),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const SelectableText(
+                    'flutter clean\nflutter run -d ios',
+                    style: TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                const Text('💡 Alternative - Use HTTPS:'),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: SelectableText(
+                    url.replaceAll('http://', 'https://'),
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: const Text(
+                    '✅ This only affects iOS. Android, Web, and Desktop work fine with HTTP.',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                // Try HTTPS version
+                _urlController.text = url.replaceAll('http://', 'https://');
+                _showMessage('Switched to HTTPS - try playing again');
+              },
+              child: const Text('Try HTTPS'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
     );
   }
 
