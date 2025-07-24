@@ -1,158 +1,72 @@
-# WebRTC Streaming Test App
+# HLS Video Player
 
-A Flutter application for testing WebRTC streaming capabilities with your media server.
+A simple, cross-platform HLS video player built with Flutter.
 
-## Features
+## ✨ Features
 
-- **Camera Preview**: Real-time camera feed display
-- **WebRTC Streaming**: Stream video/audio using WebRTC protocol
-- **Media Controls**: 
-  - Mute/unmute microphone
-  - Enable/disable camera
-  - Switch between front/back camera
-- **Server Configuration**: Configurable media server URL
-- **Permission Management**: Automatic camera and microphone permission handling
-- **Connection Status**: Real-time streaming status indicator
+- **🎬 HLS Streaming** - Play .m3u8 streams
+- **📱 Cross-Platform** - Works on iOS, Android, Web, Desktop
+- **🎮 Simple Interface** - URL input + video player
+- **⚡ Fast & Lightweight** - Minimal dependencies
 
-## Prerequisites
+## 🎯 Supported Formats
 
-- Flutter SDK 3.24.5 or higher
-- Android SDK (for Android development)
-- Xcode (for iOS development)
-- Camera and microphone permissions
+- **HLS (.m3u8)** - HTTP Live Streaming
+- **MP4** - Standard video files
+- **FLV** - Flash Video format
+- **HTTP/HTTPS streams** - Any supported video format
 
-## Setup and Installation
+## 🚀 How to Use
 
-1. **Navigate to the project directory:**
-   ```bash
-   cd /tmp/webrtc_streaming_test
-   ```
+1. **Enter stream URL** in the text field
+2. **Tap "Play Stream"** to start playback
+3. **Tap "Stop"** to stop playback
 
-2. **Install dependencies:**
-   ```bash
-   flutter pub get
-   ```
-
-3. **Run the app:**
-   ```bash
-   # For Android
-   flutter run
-
-   # For iOS (requires macOS and Xcode)
-   flutter run -d ios
-
-   # For web (limited WebRTC support)
-   flutter run -d web
-   ```
-
-## Usage
-
-1. **Launch the app** and grant camera/microphone permissions when prompted
-2. **Configure your media server** by tapping the settings icon in the top-right
-3. **Start streaming** by tapping the "Start Stream" button
-4. **Use media controls** to mute audio, disable video, or switch cameras
-5. **Stop streaming** when finished
-
-## Configuration
-
-### Media Server Setup
-
-The app is configured to work with WebRTC media servers. To connect to your server:
-
-1. Tap the settings icon in the streaming page
-2. Enter your server URL (e.g., `ws://your-server.com:8080`)
-3. Save the configuration
-
-### Default Configuration
-
-- **Server URL**: `ws://your-media-server.com:8080`
-- **Video Resolution**: 1280x720
-- **STUN Servers**: Google STUN servers for ICE negotiation
-
-## WebRTC Implementation Details
-
-The app implements:
-
-- **Peer Connection**: Creates RTCPeerConnection for media streaming
-- **Media Stream**: Captures local camera/microphone
-- **ICE Candidates**: Handles connectivity establishment
-- **Session Description Protocol (SDP)**: Manages offer/answer negotiation
-
-## Permissions Required
-
-### Android
-- `android.permission.CAMERA`
-- `android.permission.RECORD_AUDIO`
-- `android.permission.INTERNET`
-- `android.permission.ACCESS_NETWORK_STATE`
-- `android.permission.CHANGE_NETWORK_STATE`
-- `android.permission.MODIFY_AUDIO_SETTINGS`
-
-### iOS
-- `NSCameraUsageDescription`
-- `NSMicrophoneUsageDescription`
-
-## Testing with Your Media Server
-
-To test with a real media server:
-
-1. Set up a WebRTC signaling server (WebSocket-based)
-2. Implement SDP offer/answer exchange
-3. Handle ICE candidates transmission
-4. Configure the app with your server URL
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Camera/Microphone not working**
-   - Ensure permissions are granted
-   - Check device compatibility
-   - Restart the app
-
-2. **Connection failures**
-   - Verify server URL is correct
-   - Check network connectivity
-   - Ensure server is running and accessible
-
-3. **Build errors**
-   - Run `flutter clean && flutter pub get`
-   - Check Flutter and Dart versions
-   - Verify platform-specific requirements
-
-### Debug Information
-
-The app logs WebRTC events to the console:
-- ICE candidates
-- Connection state changes
-- Media stream events
-- SDP offer/answer details
-
-## Dependencies
-
-- `flutter_webrtc: ^0.11.7` - WebRTC implementation for Flutter
-- `permission_handler: ^11.3.1` - Runtime permission management
-- `http: ^1.2.2` - HTTP client for server communication
-
-## Architecture
-
+### Example URLs:
 ```
-lib/
-├── main.dart                 # App entry point and permission handling
-└── webrtc_streaming_page.dart # Main streaming interface and WebRTC logic
+# Your HLS stream
+http://47.130.109.65:8080/hls/mystream.m3u8
+
+# Test video
+https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4
 ```
 
-## Next Steps
+## 🛠️ Setup
 
-For production use, consider:
+### Prerequisites
+- Flutter SDK
+- FFmpeg (for creating HLS streams)
 
-1. **Signaling Server Integration**: Implement WebSocket connection to your signaling server
-2. **Error Handling**: Add comprehensive error handling and recovery
-3. **Quality Settings**: Allow users to configure video quality
-4. **Recording**: Add local recording capabilities
-5. **Multiple Peers**: Support for multiple concurrent connections
-6. **TURN Server**: Add TURN server for NAT traversal
+### Installation
+```bash
+flutter pub get
+flutter run
+```
 
-## License
+### Creating HLS Stream
+```bash
+# Convert video to HLS stream
+ffmpeg -re -i your_video.mp4 -c copy -f flv rtmp://47.130.109.65/hls/mystream
 
-This is a test application for development and testing purposes.
+# Your stream will be available at:
+# http://47.130.109.65:8080/hls/mystream.m3u8
+```
+
+## 📱 Platform Support
+
+| Platform | Status | Notes |
+|----------|--------|--------|
+| **iOS** | ✅ | Native HLS support |
+| **Android** | ✅ | ExoPlayer backend |
+| **Web** | ✅ | HTML5 video |
+| **macOS** | ✅ | AVPlayer backend |
+| **Windows** | ✅ | Media Foundation |
+| **Linux** | ✅ | GStreamer backend |
+
+## 🔧 Dependencies
+
+- `video_player: ^2.8.2` - Cross-platform video playback
+
+## 📝 License
+
+This project is open source and available under the MIT License.
