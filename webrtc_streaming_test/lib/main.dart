@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'rtmp_streaming_page.dart';
+import 'stream_player_page.dart';
 
 void main() {
   runApp(const RTMPStreamingApp());
@@ -185,9 +186,29 @@ class _HomePageState extends State<HomePage> {
                   ),
                 );
               } : null,
-              icon: const Icon(Icons.play_arrow),
+              icon: const Icon(Icons.camera_alt),
               label: const Text('Start RTMP Streaming'),
               style: ElevatedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+                textStyle: const TextStyle(fontSize: 18),
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const StreamPlayerPage(),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.play_circle),
+              label: const Text('Play Stream'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.purple,
+                foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
                 textStyle: const TextStyle(fontSize: 18),
               ),

@@ -50,7 +50,9 @@ class RTMPStreamingService {
       
     } catch (e) {
       debugPrint('❌ Error initializing camera: $e');
-      onError?.call('Failed to initialize camera: $e');
+      onError?.call('Camera not available - FFmpeg streaming still works: $e');
+      // Don't block the app - allow it to continue without camera preview
+      onMessage?.call('Camera preview unavailable - Use FFmpeg commands for streaming');
     }
   }
 
@@ -61,8 +63,8 @@ class RTMPStreamingService {
     }
 
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      onError?.call('Camera not initialized');
-      return;
+      onMessage?.call('Camera preview not available - FFmpeg streaming can still be used');
+      // Continue anyway - camera preview is optional for FFmpeg streaming
     }
 
     try {
@@ -157,7 +159,10 @@ Your stream will be available at: ${_config!.outputUrl}
 
   // Camera control methods
   Future<void> switchCamera() async {
-    if (_cameraController == null) return;
+    if (_cameraController == null) {
+      onMessage?.call('Camera not available - cannot switch');
+      return;
+    }
 
     try {
       final cameras = await availableCameras();
@@ -192,7 +197,10 @@ Your stream will be available at: ${_config!.outputUrl}
   }
 
   Future<void> toggleFlash() async {
-    if (_cameraController == null) return;
+    if (_cameraController == null) {
+      onMessage?.call('Camera not available - cannot toggle flash');
+      return;
+    }
 
     try {
       final currentFlashMode = _cameraController!.value.flashMode;
@@ -242,9 +250,40 @@ ${config.outputUrl}
   }
 
   // Widget for camera preview
-  Widget? getCameraPreview() {
+  Widget getCameraPreview() {
     if (_cameraController == null || !_cameraController!.value.isInitialized) {
-      return null;
+      return Container(
+        color: Colors.grey.shade200,
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.camera_alt_outlined,
+                size: 64,
+                color: Colors.grey,
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Camera Preview Not Available',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Use FFmpeg commands to stream',
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
     }
     return CameraPreview(_cameraController!);
   }
