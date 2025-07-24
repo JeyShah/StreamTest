@@ -4,7 +4,49 @@ import 'package:video_player/video_player.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 
 void main() {
-  runApp(const HLSVideoPlayerApp());
+  try {
+    WidgetsFlutterBinding.ensureInitialized();
+    runApp(const HLSVideoPlayerApp());
+  } catch (e) {
+    debugPrint('Error initializing app: $e');
+    // Try to run with minimal initialization
+    runApp(
+      MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error, size: 64, color: Colors.red),
+                const SizedBox(height: 16),
+                const Text(
+                  'Initialization Error',
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Error: $e',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    // Try to reload
+                    if (kIsWeb) {
+                      // On web, reload the page
+                      // window.location.reload();
+                    }
+                  },
+                  child: const Text('Retry'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class HLSVideoPlayerApp extends StatelessWidget {
@@ -101,50 +143,56 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   }
 
   Future<void> _playWithVlc(String url) async {
-    // Dispose of previous controllers
-    await _videoPlayerController?.dispose();
-    _vlcPlayerController?.dispose();
-    
-    setState(() {
-      _videoPlayerController = null;
-    });
-
-    // Create VLC player controller
-    _vlcPlayerController = VlcPlayerController.network(
-      url,
-      hwAcc: HwAcc.full,
-      autoPlay: true,
-      options: VlcPlayerOptions(
-        advanced: VlcAdvancedOptions([
-          VlcAdvancedOptions.networkCaching(2000),
-          VlcAdvancedOptions.clockJitter(0),
-        ]),
-        video: VlcVideoOptions([
-          VlcVideoOptions.dropLateFrames(true),
-          VlcVideoOptions.skipFrames(true),
-        ]),
-        sout: VlcStreamOutputOptions([
-          VlcStreamOutputOptions.soutMuxCaching(2000),
-        ]),
-        rtp: VlcRtpOptions([
-          VlcRtpOptions.rtpOverRtsp(true),
-        ]),
-      ),
-    );
-
-    // Add listeners
-    _vlcPlayerController!.addOnInitListener(() async {
+    try {
+      // Dispose of previous controllers
+      await _videoPlayerController?.dispose();
+      _vlcPlayerController?.dispose();
+      
       setState(() {
-        _isLoading = false;
-        _isPlaying = true;
+        _videoPlayerController = null;
       });
-    });
 
-    _vlcPlayerController!.addOnRendererEventListener((type, id, name) {
-      // Renderer event listener for debugging
-    });
+      // Create VLC player controller
+      _vlcPlayerController = VlcPlayerController.network(
+        url,
+        hwAcc: HwAcc.full,
+        autoPlay: true,
+        options: VlcPlayerOptions(
+          advanced: VlcAdvancedOptions([
+            VlcAdvancedOptions.networkCaching(2000),
+            VlcAdvancedOptions.clockJitter(0),
+          ]),
+          video: VlcVideoOptions([
+            VlcVideoOptions.dropLateFrames(true),
+            VlcVideoOptions.skipFrames(true),
+          ]),
+          sout: VlcStreamOutputOptions([
+            VlcStreamOutputOptions.soutMuxCaching(2000),
+          ]),
+          rtp: VlcRtpOptions([
+            VlcRtpOptions.rtpOverRtsp(true),
+          ]),
+        ),
+      );
 
-    await _vlcPlayerController!.initialize();
+      // Add listeners
+      _vlcPlayerController!.addOnInitListener(() async {
+        setState(() {
+          _isLoading = false;
+          _isPlaying = true;
+        });
+      });
+
+      _vlcPlayerController!.addOnRendererEventListener((type, id, name) {
+        // Renderer event listener for debugging
+      });
+
+      await _vlcPlayerController!.initialize();
+    } catch (e) {
+      // If VLC fails, fall back to standard player
+      debugPrint('VLC Player failed to initialize: $e');
+      await _playWithVideoPlayer(url);
+    }
   }
 
   Future<void> _playWithVideoPlayer(String url) async {
