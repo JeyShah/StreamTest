@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'dart:io';
 
@@ -27,6 +28,77 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
     _stopStream();
     _urlController.dispose();
     super.dispose();
+  }
+
+  Future<void> _checkFFplayAvailability() async {
+    setState(() {
+      _playerStatus = 'Checking FFplay availability...';
+    });
+
+    final commonPaths = [
+      '/usr/local/bin/ffplay',
+      '/opt/homebrew/bin/ffplay', 
+      '/usr/bin/ffplay',
+      'ffplay',
+    ];
+
+    final results = <String>[];
+    String? workingPath;
+
+    for (final path in commonPaths) {
+      try {
+        final process = await Process.start(path, ['--version'], runInShell: true);
+        final exitCode = await process.exitCode;
+        if (exitCode == 0) {
+          results.add('✅ $path: Available');
+          workingPath ??= path;
+        } else {
+          results.add('❌ $path: Found but not working');
+        }
+      } catch (e) {
+        results.add('❌ $path: Not found');
+      }
+    }
+
+    setState(() {
+      _playerStatus = workingPath != null 
+          ? 'FFplay found at $workingPath ✅' 
+          : 'FFplay not available ❌';
+    });
+
+    final message = '''
+FFplay Availability Check:
+
+${results.join('\n')}
+
+${workingPath != null ? '''
+✅ GOOD NEWS: FFplay is available!
+Working path: $workingPath
+
+You can use FFplay directly in Terminal:
+ffplay "${_urlController.text}"
+''' : '''
+❌ FFplay not found in common locations.
+
+🔧 Installation options:
+1. Install via Homebrew:
+   brew install ffmpeg
+
+2. Download from official site:
+   https://ffmpeg.org/download.html
+
+3. Install via MacPorts:
+   sudo port install ffmpeg +universal
+
+💡 After installation, restart this app to detect FFplay.
+'''}
+
+🎯 Alternative: Use VLC Media Player
+If you have VLC installed, you can also use:
+vlc "${_urlController.text}"
+''';
+
+    _showDetailedMessage('FFplay Availability Report', message);
   }
 
   Future<void> _testServerConnectivity() async {
@@ -185,13 +257,40 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
     });
 
     try {
+      // First try to find ffplay in common locations
+      String ffplayPath = 'ffplay';
+      
+      // Try common FFmpeg installation paths on macOS
+      final commonPaths = [
+        '/usr/local/bin/ffplay',
+        '/opt/homebrew/bin/ffplay',
+        '/usr/bin/ffplay',
+        'ffplay', // System PATH
+      ];
+      
+      String? workingPath;
+      for (final path in commonPaths) {
+        try {
+          final testProcess = await Process.start(path, ['--help'], runInShell: true);
+          testProcess.kill();
+          workingPath = path;
+          break;
+        } catch (e) {
+          continue;
+        }
+      }
+      
+      if (workingPath == null) {
+        throw 'FFplay not found in common locations';
+      }
+      
       // Try to launch the stream with ffplay
-      _playerProcess = await Process.start('ffplay', [
+      _playerProcess = await Process.start(workingPath, [
         '-i', url,
         '-window_title', 'RTMP Stream Player',
         '-autoexit',  // Exit when stream ends
         '-loglevel', 'quiet',  // Reduce log output
-      ]);
+      ], runInShell: true);
 
       setState(() {
         _playerStatus = 'Playing stream 🎬';
@@ -237,13 +336,14 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
   void _showFFplayInstructions(String url) {
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Row(
             children: [
-              Icon(Icons.info, color: Colors.blue),
+              Icon(Icons.play_circle_outline, color: Colors.orange),
               SizedBox(width: 8),
-              Text('Stream Player Instructions'),
+              Text('Play Stream Manually'),
             ],
           ),
           content: SingleChildScrollView(
@@ -251,15 +351,24 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'FFplay is not available or failed to start. You can play the stream manually:',
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: const Text(
+                    '✅ GOOD NEWS: Your stream is working!\nSince FFplay works in your terminal, just use that.',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
                 ),
-                const SizedBox(height: 16),
                 
-                const Text('🎯 Using FFplay (Recommended):'),
+                const SizedBox(height: 16),
+                const Text('🎯 Copy and run this command in Terminal:'),
                 const SizedBox(height: 8),
                 Container(
+                  width: double.infinity,
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Colors.grey.shade100,
@@ -271,66 +380,109 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
                     style: const TextStyle(
                       fontFamily: 'monospace',
                       fontSize: 14,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
                 ),
                 
                 const SizedBox(height: 16),
-                const Text('🎬 Using VLC Media Player:'),
+                const Text('🔧 Why the app can\'t launch FFplay:'),
                 const SizedBox(height: 8),
+                const Text('• FFplay might not be in the app\'s PATH'),
+                const Text('• macOS security restrictions'),
+                const Text('• Different shell environment'),
+                
+                const SizedBox(height: 16),
+                const Text('💡 Alternative options:'),
+                const SizedBox(height: 8),
+                
+                const Text('🎬 Using VLC Media Player:'),
+                const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade300),
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: SelectableText(
                     'vlc "$url"',
                     style: const TextStyle(
                       fontFamily: 'monospace',
-                      fontSize: 14,
+                      fontSize: 12,
                     ),
                   ),
                 ),
                 
-                const SizedBox(height: 16),
-                const Text('🌐 In Web Browser:'),
                 const SizedBox(height: 8),
+                const Text('🌐 Or open in Safari (for some stream types):'),
+                const SizedBox(height: 4),
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.grey.shade100,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade300),
+                    color: Colors.grey.shade50,
+                    borderRadius: BorderRadius.circular(6),
                   ),
                   child: SelectableText(
                     url,
                     style: const TextStyle(
                       fontFamily: 'monospace',
-                      fontSize: 14,
+                      fontSize: 11,
                       color: Colors.blue,
                     ),
                   ),
                 ),
                 
                 const SizedBox(height: 16),
-                const Text(
-                  '💡 Install FFmpeg/FFplay for direct playback from this app.',
-                  style: TextStyle(
-                    fontStyle: FontStyle.italic,
-                    color: Colors.grey,
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.blue.shade200),
+                  ),
+                  child: const Text(
+                    '🎯 Since your terminal FFplay command works, that\'s the most reliable option!',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Got it'),
-            ),
-          ],
+                      actions: [
+              TextButton(
+                onPressed: () async {
+                  // Copy ffplay command to clipboard
+                  await Clipboard.setData(ClipboardData(text: 'ffplay "$url"'));
+                  Navigator.of(context).pop();
+                  _showMessage('FFplay command copied to clipboard! Paste in Terminal.');
+                },
+                child: const Text('Copy Command'),
+              ),
+              TextButton(
+                onPressed: () async {
+                  // Try to open Terminal and copy command
+                  try {
+                    await Clipboard.setData(ClipboardData(text: 'ffplay "$url"'));
+                    await Process.start('open', ['-a', 'Terminal'], runInShell: true);
+                    Navigator.of(context).pop();
+                    _showMessage('Terminal opened! Paste the command (Cmd+V)');
+                  } catch (e) {
+                    Navigator.of(context).pop();
+                    _showMessage('Command copied! Open Terminal manually and paste.');
+                  }
+                },
+                child: const Text('Open Terminal'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Close'),
+              ),
+            ],
         );
       },
     );
@@ -487,6 +639,11 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
         backgroundColor: Colors.purple,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.play_circle_outline),
+            onPressed: _checkFFplayAvailability,
+            tooltip: 'Check FFplay',
+          ),
           IconButton(
             icon: const Icon(Icons.network_ping),
             onPressed: _testServerConnectivity,
