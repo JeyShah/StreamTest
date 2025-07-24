@@ -29,6 +29,48 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
     super.dispose();
   }
 
+  Future<void> _testServerConnectivity() async {
+    setState(() {
+      _playerStatus = 'Testing server connectivity...';
+    });
+
+    final serverIP = '47.130.109.65';
+    final ports = [8080, 1935, 80];
+    final results = <String>[];
+
+    for (final port in ports) {
+      try {
+        final socket = await Socket.connect(serverIP, port, timeout: const Duration(seconds: 3));
+        socket.destroy();
+        results.add('✅ Port $port: Open');
+      } catch (e) {
+        results.add('❌ Port $port: Closed or filtered');
+      }
+    }
+
+    setState(() {
+      _playerStatus = 'Server connectivity test completed';
+    });
+
+    final message = '''
+Server Connectivity Test Results:
+
+${results.join('\n')}
+
+💡 Recommendations:
+• If port 8080 is open, your stream URL should work
+• If port 1935 is open, try the alternative port preset
+• If all ports are closed, check if your server is running
+
+🔧 Next steps:
+1. If ports are open, make sure FFmpeg is streaming
+2. Wait 10-15 seconds after starting FFmpeg
+3. Try the stream URL test again
+''';
+
+    _showDetailedMessage('Server Connectivity Results', message);
+  }
+
   Future<void> _testStreamUrl() async {
     final url = _urlController.text.trim();
     if (url.isEmpty) {
@@ -43,8 +85,8 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
     try {
       final uri = Uri.parse(url);
       
-      // Try HEAD request first (faster)
-      var response = await http.head(uri).timeout(const Duration(seconds: 10));
+      // Try HEAD request first (faster) with shorter timeout
+      var response = await http.head(uri).timeout(const Duration(seconds: 5));
       
       if (response.statusCode == 200) {
         setState(() {
@@ -56,7 +98,7 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
       
       // If HEAD fails, try GET request (some servers don't support HEAD)
       if (response.statusCode == 405 || response.statusCode == 404) {
-        response = await http.get(uri).timeout(const Duration(seconds: 10));
+        response = await http.get(uri).timeout(const Duration(seconds: 5));
         
         if (response.statusCode == 200) {
           setState(() {
@@ -89,7 +131,25 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
       String errorMessage = 'Error testing stream: $e';
       
       // Provide specific guidance for common errors
-      if (e.toString().contains('ClientException')) {
+      if (e.toString().contains('TimeoutException')) {
+        errorMessage = 'Connection timeout - Server not responding';
+        errorMessage += '\n\n💡 Possible causes:\n';
+        errorMessage += '• Server is not running on port 8080\n';
+        errorMessage += '• Stream is not active yet\n';
+        errorMessage += '• Firewall blocking connection\n';
+        errorMessage += '• Wrong server IP or port\n\n';
+        errorMessage += '🔧 Troubleshooting steps:\n';
+        errorMessage += '1. Check if your RTMP server is running\n';
+        errorMessage += '2. Verify server accepts HTTP requests on port 8080\n';
+        errorMessage += '3. Make sure FFmpeg is streaming:\n';
+        errorMessage += '   ffmpeg -re -i /Users/mac/Downloads/IK.mp4 -c copy -f flv rtmp://47.130.109.65/hls/mystream\n';
+        errorMessage += '4. Wait 10-15 seconds after starting FFmpeg\n';
+        errorMessage += '5. Try alternative URLs (see presets)\n\n';
+        errorMessage += '🌐 Alternative test URLs:\n';
+        errorMessage += '• http://47.130.109.65:8080/hls/mystream.m3u8\n';
+        errorMessage += '• http://47.130.109.65:1935/hls/mystream.flv\n';
+        errorMessage += '• http://47.130.109.65/hls/mystream.flv';
+      } else if (e.toString().contains('ClientException')) {
         errorMessage += '\n\n💡 Possible causes:\n';
         errorMessage += '• Stream is not active (run your FFmpeg command first)\n';
         errorMessage += '• Server is not responding\n';
@@ -106,7 +166,7 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
     }
   }
 
-  Future<void> _playStream() async {
+  Future<void> _playStream({bool skipTest = false}) async {
     final url = _urlController.text.trim();
     if (url.isEmpty) {
       _showMessage('Please enter a stream URL');
@@ -120,7 +180,7 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
 
     setState(() {
       _isPlaying = true;
-      _playerStatus = 'Starting player...';
+      _playerStatus = skipTest ? 'Trying to play without test...' : 'Starting player...';
     });
 
     try {
@@ -352,6 +412,18 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
                 ),
                 
                 _buildPresetTile(
+                  '🔄 Alternative Port (1935)',
+                  'http://47.130.109.65:1935/hls/mystream.flv',
+                  'Try different port if 8080 fails',
+                ),
+                
+                _buildPresetTile(
+                  '🌐 No Port Specified',
+                  'http://47.130.109.65/hls/mystream.flv',
+                  'Default HTTP port (80)',
+                ),
+                
+                _buildPresetTile(
                   '🔴 Test Stream (Big Buck Bunny)',
                   'http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
                   'Test video stream',
@@ -414,6 +486,11 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
         backgroundColor: Colors.purple,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.network_ping),
+            onPressed: _testServerConnectivity,
+            tooltip: 'Test Server',
+          ),
           IconButton(
             icon: const Icon(Icons.list),
             onPressed: _showPresetUrls,
@@ -513,14 +590,27 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: _playStream,
                     icon: Icon(_isPlaying ? Icons.stop : Icons.play_arrow),
-                    label: Text(_isPlaying ? 'Stop Player' : 'Play Stream'),
+                    label: Text(_isPlaying ? 'Stop' : 'Play'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _isPlaying ? Colors.red : Colors.green,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _playStream(skipTest: true),
+                    icon: const Icon(Icons.play_circle_outline),
+                    label: const Text('Try Play'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
@@ -611,9 +701,9 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
                     ),
                     const SizedBox(height: 12),
                     const Text('1. Start your FFmpeg stream (see command above)'),
-                    const Text('2. Enter or verify the stream URL'),
-                    const Text('3. Tap "Test URL" to verify the stream is accessible'),
-                    const Text('4. Tap "Play Stream" to launch the player'),
+                    const Text('2. Test server connectivity (network icon)'),
+                    const Text('3. Enter or verify the stream URL'),
+                    const Text('4. Test URL or try playing directly'),
                     const SizedBox(height: 8),
                     Text(
                       '💡 Supports: HTTP-FLV, HLS (.m3u8), RTMP, MP4, and more',
