@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:video_player/video_player.dart';
 
 void main() {
@@ -159,6 +160,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       setState(() {});
     }
   }
+
+
 
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
@@ -346,6 +349,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       );
     }
 
+    
+
     if (_videoPlayerController != null && _videoPlayerController!.value.isInitialized) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(8),
@@ -487,6 +492,45 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
               ),
               textAlign: TextAlign.center,
             ),
+            if (kIsWeb) ...[
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  border: Border.all(color: Colors.blue.shade200),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info, color: Colors.blue.shade700, size: 16),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Web Platform Notes:',
+                          style: TextStyle(
+                            color: Colors.blue.shade700,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '• Some HLS streams may not work due to CORS restrictions\n'
+                      '• MP4 videos generally work better on web\n'
+                      '• Try the working test URLs provided above',
+                      style: TextStyle(
+                        color: Colors.blue.shade700,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),
