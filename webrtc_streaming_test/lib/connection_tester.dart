@@ -1,8 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:web_socket_channel/status.dart' as status;
 import 'stream_config.dart';
 
 class ConnectionTester {
@@ -207,43 +205,40 @@ class ConnectionTester {
     final tests = results['tests'] as Map<String, dynamic>;
     final recommendations = results['recommendations'] as List<String>;
     
-    final wsTest = tests['WebSocket Connection'];
+    final rtmpTest = tests['RTMP Server Connection'];
     final inputHttpTest = tests['Input Server HTTP'];
     final outputHttpTest = tests['Output Server HTTP'];
-    final rtmpTest = tests['RTMP Server Check'];
+    final pathTest = tests['RTMP HTTP Paths'];
 
-    // WebSocket specific recommendations
-    if (wsTest['status'] == 'failed') {
-      if (wsTest['errorType'] == 'connection_refused') {
-        recommendations.add('❌ Server is not accepting connections on port ${results['config']['inputPort']}');
-        recommendations.add('💡 Check if your WebSocket server is running');
-        recommendations.add('💡 Verify firewall settings allow port ${results['config']['inputPort']}');
-      } else if (wsTest['errorType'] == 'websocket_handshake_failed') {
-        recommendations.add('❌ Server does not support WebSocket protocol');
-        recommendations.add('💡 Your server might expect regular HTTP instead of WebSocket');
-        recommendations.add('💡 Check if server supports WebSocket upgrade headers');
-      } else if (wsTest['errorType'] == 'no_response') {
-        recommendations.add('❌ No WebSocket service running on port ${results['config']['inputPort']}');
-        recommendations.add('💡 Server might be running a different service (HTTP, RTMP, etc.)');
+    // RTMP specific recommendations
+    if (rtmpTest['status'] == 'failed') {
+      recommendations.add('❌ RTMP server is not accessible on port ${results['config']['inputPort']}');
+      recommendations.add('💡 Check if your RTMP server is running');
+      recommendations.add('💡 Verify firewall settings allow port ${results['config']['inputPort']}');
+      
+      if (rtmpTest['alternativePort'] != null) {
+        recommendations.add('✅ RTMP server found on standard port ${rtmpTest['alternativePort']}');
+        recommendations.add('💡 Try changing your port to ${rtmpTest['alternativePort']}');
       }
+    } else if (rtmpTest['status'] == 'success') {
+      recommendations.add('✅ RTMP server is accessible and ready for streaming');
+      recommendations.add('💡 You can stream to: ${rtmpTest['rtmpUrl']}');
     }
 
     // HTTP connectivity recommendations
     if (inputHttpTest['status'] == 'success') {
       recommendations.add('✅ Input server is reachable via HTTP');
-      if (wsTest['status'] == 'failed') {
-        recommendations.add('💡 Try using HTTP API instead of WebSocket for media streaming');
-      }
     }
 
     if (outputHttpTest['status'] == 'success') {
       recommendations.add('✅ Output server is reachable and responding');
     }
 
-    // RTMP recommendations
-    if (rtmpTest['status'] == 'success') {
-      recommendations.add('✅ RTMP port is accessible - server might expect RTMP protocol');
-      recommendations.add('💡 Consider switching to RTMP streaming instead of WebRTC');
+    // Path testing recommendations
+    if (pathTest['status'] == 'success' && pathTest['workingPaths'] != null) {
+      final workingPaths = pathTest['workingPaths'] as List;
+      recommendations.add('✅ Found working RTMP paths: ${workingPaths.join(', ')}');
+      recommendations.add('💡 Your server supports multiple path formats');
     }
 
     // Alternative port recommendations
@@ -263,13 +258,19 @@ class ConnectionTester {
     }
 
     // Overall recommendations
-    if (wsTest['status'] == 'failed' && inputHttpTest['status'] == 'success') {
+    if (rtmpTest['status'] == 'failed') {
       recommendations.add('');
       recommendations.add('🔧 SUGGESTED SOLUTIONS:');
-      recommendations.add('1. Check if your server supports WebSocket connections');
-      recommendations.add('2. Verify server expects WebSocket on port ${results['config']['inputPort']}');
-      recommendations.add('3. Consider implementing HTTP-based streaming instead');
-      recommendations.add('4. Check server documentation for correct protocol');
+      recommendations.add('1. Check if your RTMP server is running');
+      recommendations.add('2. Verify server accepts RTMP on port ${results['config']['inputPort']}');
+      recommendations.add('3. Try standard RTMP port 1935 if using different port');
+      recommendations.add('4. Check server configuration and firewall settings');
+    } else if (rtmpTest['status'] == 'success') {
+      recommendations.add('');
+      recommendations.add('🎯 READY TO STREAM:');
+      recommendations.add('1. Use FFmpeg to stream to your server');
+      recommendations.add('2. RTMP URL: ${results['config']['rtmpUrl']}');
+      recommendations.add('3. View stream at: ${results['config']['outputUrl']}');
     }
   }
 
