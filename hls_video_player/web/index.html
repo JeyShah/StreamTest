@@ -48,8 +48,22 @@
           serviceWorkerVersion: serviceWorkerVersion,
         },
         onEntrypointLoaded: function(engineInitializer) {
-          engineInitializer.initializeEngine().then(function(appRunner) {
+          engineInitializer.initializeEngine({
+            renderer: "canvaskit"
+          }).then(function(appRunner) {
             appRunner.runApp();
+          }).catch(function(error) {
+            console.error('Failed to initialize Flutter engine:', error);
+            // Try with HTML renderer as fallback
+            engineInitializer.initializeEngine({
+              renderer: "html"
+            }).then(function(appRunner) {
+              appRunner.runApp();
+            }).catch(function(fallbackError) {
+              console.error('Both renderers failed:', fallbackError);
+              // Show a basic error message
+              document.body.innerHTML = '<div style="text-align: center; padding: 50px; font-family: Arial;"><h2>Loading Error</h2><p>Failed to initialize the video player. Please refresh the page or try a different browser.</p><button onclick="location.reload()">Refresh</button></div>';
+            });
           });
         }
       });
