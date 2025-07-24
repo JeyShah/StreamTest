@@ -4,6 +4,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'stream_config.dart';
 import 'rtmp_streaming_service.dart';
 import 'connection_tester.dart';
+import 'stream_player_page.dart';
 
 class RTMPStreamingPage extends StatefulWidget {
   const RTMPStreamingPage({Key? key}) : super(key: key);
@@ -420,6 +421,18 @@ class _RTMPStreamingPageState extends State<RTMPStreamingPage> {
             onPressed: _testConnection,
             tooltip: 'Test Connection',
           ),
+          IconButton(
+            icon: const Icon(Icons.play_circle),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const StreamPlayerPage(),
+                ),
+              );
+            },
+            tooltip: 'Play Stream',
+          ),
         ],
       ),
       body: Column(
@@ -524,17 +537,34 @@ class _RTMPStreamingPageState extends State<RTMPStreamingPage> {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _isStreaming ? Colors.red : Colors.green,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                       ),
                     ),
                     ElevatedButton.icon(
                       onPressed: _showFFmpegInstructions,
                       icon: const Icon(Icons.terminal),
-                      label: const Text('Get Commands'),
+                      label: const Text('Commands'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue,
                         foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const StreamPlayerPage(),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.play_circle),
+                      label: const Text('Play'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.purple,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                       ),
                     ),
                   ],
