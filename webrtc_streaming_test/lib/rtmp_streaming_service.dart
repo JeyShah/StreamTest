@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'package:path_provider/path_provider.dart';
 import 'stream_config.dart';
 
 class RTMPStreamingService {
@@ -69,19 +68,16 @@ class RTMPStreamingService {
     try {
       onStatusChanged?.call('Starting RTMP stream...');
       
-      // Start video recording to a temporary file
-      final directory = await getTemporaryDirectory();
-      final videoPath = '${directory.path}/temp_stream.mp4';
-      
-      await _cameraController!.startVideoRecording();
-      onMessage?.call('Camera recording started');
+      // Note: This Flutter app provides camera preview and FFmpeg instructions
+      // Actual RTMP streaming is done via external FFmpeg command
+      onMessage?.call('Camera preview active - ready for streaming');
 
-      // Use FFmpeg to stream the camera feed to RTMP
+      // Generate FFmpeg command for the user
       await _startFFmpegStream();
       
       _isStreaming = true;
-      onStatusChanged?.call('Streaming to RTMP server');
-      onMessage?.call('RTMP stream started successfully');
+      onStatusChanged?.call('Ready for RTMP streaming');
+      onMessage?.call('Use the FFmpeg command provided to start streaming');
       
     } catch (e) {
       debugPrint('❌ Error starting RTMP stream: $e');
@@ -131,10 +127,8 @@ Your stream will be available at: ${_config!.outputUrl}
     try {
       onStatusChanged?.call('Stopping stream...');
       
-      // Stop camera recording
-      if (_cameraController != null && _cameraController!.value.isRecordingVideo) {
-        await _cameraController!.stopVideoRecording();
-      }
+      // Note: Camera preview continues, only streaming mode is disabled
+      onMessage?.call('Streaming mode disabled - camera preview still active');
 
       // Stop FFmpeg process if running
       if (_ffmpegProcess != null) {
