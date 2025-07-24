@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'package:video_player/video_player.dart';
 import 'dart:io';
 
 class StreamPlayerPage extends StatefulWidget {
@@ -14,7 +15,12 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
   final TextEditingController _urlController = TextEditingController();
   bool _isPlaying = false;
   String _playerStatus = 'Ready to play';
-  Process? _playerProcess;
+  VideoPlayerController? _videoController;
+  bool _isLoading = false;
+  bool _hasError = false;
+  String _errorMessage = '';
+  double _volume = 1.0;
+  bool _showControls = true;
 
   @override
   void initState() {
@@ -25,7 +31,7 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
 
   @override
   void dispose() {
-    _stopStream();
+    _videoController?.dispose();
     _urlController.dispose();
     super.dispose();
   }
@@ -252,85 +258,435 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
     }
 
     setState(() {
-      _isPlaying = true;
-      _playerStatus = skipTest ? 'Trying to play without test...' : 'Starting player...';
+      _isLoading = true;
+      _hasError = false;
+      _playerStatus = 'Loading stream...';
     });
 
     try {
-      // First try to find ffplay in common locations
-      String ffplayPath = 'ffplay';
-      
-      // Try common FFmpeg installation paths on macOS
-      final commonPaths = [
-        '/usr/local/bin/ffplay',
-        '/opt/homebrew/bin/ffplay',
-        '/usr/bin/ffplay',
-        'ffplay', // System PATH
-      ];
-      
-      String? workingPath;
-      for (final path in commonPaths) {
-        try {
-          final testProcess = await Process.start(path, ['--help'], runInShell: true);
-          testProcess.kill();
-          workingPath = path;
-          break;
-        } catch (e) {
-          continue;
-        }
+      // Dispose existing controller
+      await _videoController?.dispose();
+
+      // Create new video controller
+      Uri uri;
+      try {
+        uri = Uri.parse(url);
+      } catch (e) {
+        throw 'Invalid URL format: $url';
       }
-      
-      if (workingPath == null) {
-        throw 'FFplay not found in common locations';
+
+      if (uri.scheme == 'http' || uri.scheme == 'https') {
+        _videoController = VideoPlayerController.networkUrl(uri);
+      } else if (uri.scheme == 'rtmp') {
+        _videoController = VideoPlayerController.networkUrl(uri);
+      } else {
+        throw 'Unsupported URL scheme: ${uri.scheme}. Use HTTP, HTTPS, or RTMP.';
       }
-      
-      // Try to launch the stream with ffplay
-      _playerProcess = await Process.start(workingPath, [
-        '-i', url,
-        '-window_title', 'RTMP Stream Player',
-        '-autoexit',  // Exit when stream ends
-        '-loglevel', 'quiet',  // Reduce log output
-      ], runInShell: true);
+
+      // Set up error listener
+      _videoController!.addListener(_videoPlayerListener);
+
+      // Initialize the controller
+      await _videoController!.initialize();
+
+      // Start playing
+      await _videoController!.play();
+      await _videoController!.setVolume(_volume);
 
       setState(() {
+        _isLoading = false;
+        _isPlaying = true;
         _playerStatus = 'Playing stream 🎬';
       });
 
-      // Monitor the process
-      _playerProcess!.exitCode.then((exitCode) {
-        if (mounted) {
-          setState(() {
-            _isPlaying = false;
-            _playerStatus = exitCode == 0 
-                ? 'Stream ended' 
-                : 'Player stopped (code: $exitCode)';
-          });
-        }
-      });
+      _showMessage('Stream started successfully!');
 
-      _showMessage('Stream player launched! Check for new window.');
-      
     } catch (e) {
       setState(() {
+        _isLoading = false;
         _isPlaying = false;
-        _playerStatus = 'Failed to start player ❌';
+        _hasError = true;
+        _errorMessage = e.toString();
+        _playerStatus = 'Failed to play stream ❌';
       });
-      
-      // Show detailed instructions if ffplay is not available
-      _showFFplayInstructions(url);
+
+      // Show alternatives for unsupported formats
+      if (e.toString().contains('rtmp') || e.toString().contains('unsupported')) {
+        _showStreamFormatHelp(url);
+      } else {
+        _showMessage('Error: ${e.toString()}');
+      }
+    }
+  }
+
+  void _videoPlayerListener() {
+    if (_videoController == null) return;
+
+    if (_videoController!.value.hasError) {
+      setState(() {
+        _hasError = true;
+        _errorMessage = _videoController!.value.errorDescription ?? 'Unknown video error';
+        _playerStatus = 'Stream error ❌';
+        _isPlaying = false;
+        _isLoading = false;
+      });
     }
   }
 
   Future<void> _stopStream() async {
-    if (_playerProcess != null) {
-      _playerProcess!.kill();
-      _playerProcess = null;
+    if (_videoController != null) {
+      await _videoController!.pause();
+      _videoController!.removeListener(_videoPlayerListener);
+      await _videoController!.dispose();
+      _videoController = null;
     }
     
     setState(() {
       _isPlaying = false;
+      _isLoading = false;
       _playerStatus = 'Player stopped';
     });
+  }
+
+  Future<void> _togglePlayPause() async {
+    if (_videoController == null) return;
+
+    if (_videoController!.value.isPlaying) {
+      await _videoController!.pause();
+      setState(() {
+        _isPlaying = false;
+        _playerStatus = 'Paused';
+      });
+    } else {
+      await _videoController!.play();
+      setState(() {
+        _isPlaying = true;
+        _playerStatus = 'Playing stream 🎬';
+      });
+    }
+  }
+
+  Future<void> _setVolume(double volume) async {
+    _volume = volume;
+    if (_videoController != null) {
+      await _videoController!.setVolume(volume);
+    }
+    setState(() {});
+  }
+
+  Widget _buildVideoPlayer() {
+    if (_isLoading) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: Colors.white),
+            SizedBox(height: 16),
+            Text(
+              'Loading stream...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_hasError) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(
+              Icons.error_outline,
+              color: Colors.red,
+              size: 48,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Failed to load stream',
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                _errorMessage,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => _showStreamFormatHelp(_urlController.text),
+              child: const Text('Get Help'),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (_videoController != null && _videoController!.value.isInitialized) {
+      return GestureDetector(
+        onTap: () {
+          setState(() {
+            _showControls = !_showControls;
+          });
+        },
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            SizedBox.expand(
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: SizedBox(
+                  width: _videoController!.value.size.width,
+                  height: _videoController!.value.size.height,
+                  child: VideoPlayer(_videoController!),
+                ),
+              ),
+            ),
+            if (_showControls) ...[
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: IconButton(
+                  onPressed: _togglePlayPause,
+                  icon: Icon(
+                    _videoController!.value.isPlaying ? Icons.pause : Icons.play_arrow,
+                    color: Colors.white,
+                    size: 48,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.play_circle_outline,
+            color: Colors.white54,
+            size: 64,
+          ),
+          SizedBox(height: 16),
+          Text(
+            'Enter stream URL and tap Play',
+            style: TextStyle(
+              color: Colors.white54,
+              fontSize: 16,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildVideoControls() {
+    if (_videoController == null || !_videoController!.value.isInitialized) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      color: Colors.grey.shade50,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            // Progress bar
+            VideoProgressIndicator(
+              _videoController!,
+              allowScrubbing: true,
+              colors: VideoProgressColors(
+                backgroundColor: Colors.grey.shade300,
+                bufferedColor: Colors.grey.shade400,
+                playedColor: Colors.purple,
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Volume control
+            Row(
+              children: [
+                const Icon(Icons.volume_down),
+                Expanded(
+                  child: Slider(
+                    value: _volume,
+                    min: 0.0,
+                    max: 1.0,
+                    onChanged: _setVolume,
+                    activeColor: Colors.purple,
+                  ),
+                ),
+                const Icon(Icons.volume_up),
+                const SizedBox(width: 8),
+                Text('${(_volume * 100).round()}%'),
+              ],
+            ),
+            
+            // Stream info
+            if (_videoController!.value.isInitialized) ...[
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Resolution: ${_videoController!.value.size.width.toInt()}x${_videoController!.value.size.height.toInt()}',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Text(
+                    'Duration: ${_videoController!.value.duration.inSeconds > 0 ? _formatDuration(_videoController!.value.duration) : 'Live'}',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final hours = twoDigits(duration.inHours);
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return duration.inHours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
+  }
+
+  void _showStreamFormatHelp(String url) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.info, color: Colors.orange),
+              SizedBox(width: 8),
+              Text('Stream Format Help'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange.shade200),
+                  ),
+                  child: const Text(
+                    '⚠️ This stream format may not be supported by the built-in player.',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                const Text('🎯 Supported formats in the app:'),
+                const SizedBox(height: 8),
+                const Text('✅ HTTP/HTTPS streams (.mp4, .m3u8, .flv)'),
+                const Text('✅ HLS streams (.m3u8)'),
+                const Text('✅ Progressive download videos'),
+                const Text('⚠️ RTMP streams (limited support)'),
+                
+                const SizedBox(height: 16),
+                const Text('🔧 Try these alternatives:'),
+                const SizedBox(height: 8),
+                
+                if (url.contains('rtmp://')) ...[
+                  const Text('Your URL is RTMP - try these HTTP versions:'),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: SelectableText(
+                      url.replaceAll('rtmp://', 'http://').replaceAll(':1935/', ':8080/') + '.flv',
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade100,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: SelectableText(
+                      url.replaceAll('rtmp://', 'http://').replaceAll(':1935/', ':8080/') + '.m3u8',
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                    ),
+                  ),
+                ],
+                
+                const SizedBox(height: 16),
+                const Text('💡 External player options:'),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: SelectableText(
+                    'ffplay "$url"',
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: SelectableText(
+                    'vlc "$url"',
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: 'ffplay "$url"'));
+                Navigator.of(context).pop();
+                _showMessage('FFplay command copied to clipboard!');
+              },
+              child: const Text('Copy FFplay Command'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showFFplayInstructions(String url) {
@@ -733,6 +1089,29 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
             
             const SizedBox(height: 16),
             
+            // Video Player
+            Container(
+              height: 300,
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.shade300),
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: _buildVideoPlayer(),
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
+            // Video Controls
+            if (_videoController != null && _videoController!.value.isInitialized) ...[
+              _buildVideoControls(),
+              const SizedBox(height: 16),
+            ],
+            
             // Action Buttons
             Row(
               children: [
@@ -751,9 +1130,15 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
                 const SizedBox(width: 8),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: _playStream,
-                    icon: Icon(_isPlaying ? Icons.stop : Icons.play_arrow),
-                    label: Text(_isPlaying ? 'Stop' : 'Play'),
+                    onPressed: _isLoading ? null : _playStream,
+                    icon: _isLoading 
+                        ? const SizedBox(
+                            width: 16, 
+                            height: 16, 
+                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)
+                          )
+                        : Icon(_isPlaying ? Icons.stop : Icons.play_arrow),
+                    label: Text(_isLoading ? 'Loading...' : (_isPlaying ? 'Stop' : 'Play')),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: _isPlaying ? Colors.red : Colors.green,
                       foregroundColor: Colors.white,
@@ -761,19 +1146,21 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _playStream(skipTest: true),
-                    icon: const Icon(Icons.play_circle_outline),
-                    label: const Text('Try Play'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                if (_videoController != null && _videoController!.value.isInitialized) ...[
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: _togglePlayPause,
+                      icon: Icon(_videoController!.value.isPlaying ? Icons.pause : Icons.play_arrow),
+                      label: Text(_videoController!.value.isPlaying ? 'Pause' : 'Resume'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.orange,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
                     ),
                   ),
-                ),
+                ],
               ],
             ),
             
@@ -859,32 +1246,32 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
                     ),
                     const SizedBox(height: 12),
                     const Text('1. Start your FFmpeg stream (see command above)'),
-                    const Text('2. Verify the stream URL is correct'),
-                    const Text('3. Use "Try Play" (orange) - works even if test fails'),
-                    const Text('4. Optional: Test server connectivity (network icon)'),
+                    const Text('2. Enter the stream URL in the text field'),
+                    const Text('3. Tap "Play" to start streaming in the app'),
+                    const Text('4. Use volume controls and tap video to show/hide controls'),
                     const SizedBox(height: 12),
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: Colors.orange.shade50,
+                        color: Colors.purple.shade50,
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: Colors.orange.shade200),
+                        border: Border.all(color: Colors.purple.shade200),
                       ),
                       child: Text(
-                        '🎯 For streaming URLs, use "Try Play" instead of "Test URL" - it bypasses HTTP testing and launches FFplay directly!',
+                        '🎬 Built-in Video Player: Streams play directly in the app with full controls!',
                         style: TextStyle(
                           fontWeight: FontWeight.w500,
-                          color: Colors.orange.shade800,
+                          color: Colors.purple.shade800,
                           fontSize: 13,
                         ),
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      '💡 Supports: HTTP-FLV, HLS (.m3u8), RTMP, MP4, and more',
+                      '✅ Supports: HTTP/HTTPS streams, HLS (.m3u8), MP4, FLV, and more',
                       style: TextStyle(
-                        fontStyle: FontStyle.italic,
-                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
+                        color: Colors.green.shade700,
                       ),
                     ),
                   ],
