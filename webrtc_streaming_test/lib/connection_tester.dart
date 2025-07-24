@@ -14,8 +14,8 @@ class ConnectionTester {
         'inputPort': config.inputPort,
         'outputHost': config.outputHost,
         'outputPort': config.outputPort,
-        'simNumber': config.simNumber,
-        'webrtcUrl': config.webrtcSignalingUrl,
+        'streamKey': config.streamKey,
+        'rtmpUrl': config.rtmpStreamUrl,
         'outputUrl': config.outputUrl,
       },
       'tests': <String, dynamic>{},
@@ -38,14 +38,14 @@ class ConnectionTester {
       results['tests']
     );
 
-    // Test 3: WebSocket connectivity test
-    await _testWebSocketConnectivity(config, results['tests']);
+    // Test 3: RTMP connectivity test
+    await _testRTMPConnectivity(config, results['tests']);
 
     // Test 4: Check for alternative ports
     await _testAlternativePorts(config, results['tests']);
 
-    // Test 5: Check if RTMP might be expected instead
-    await _testRTMPConnectivity(config, results['tests']);
+    // Test 4: Test alternative HTTP paths for RTMP
+    await _testRTMPHTTPPaths(config, results['tests']);
 
     // Generate recommendations
     _generateRecommendations(results);
@@ -89,77 +89,7 @@ class ConnectionTester {
     test['endTime'] = DateTime.now().toIso8601String();
   }
 
-  static Future<void> _testWebSocketConnectivity(
-    StreamConfig config, 
-    Map<String, dynamic> tests
-  ) async {
-    final test = <String, dynamic>{
-      'status': 'testing',
-      'startTime': DateTime.now().toIso8601String(),
-      'url': config.webrtcSignalingUrl,
-    };
-    tests['WebSocket Connection'] = test;
-
-    try {
-      final uri = Uri.parse(config.webrtcSignalingUrl);
-             test['parsedUri'] = uri.toString();
-       test['scheme'] = uri.scheme;
-       test['host'] = uri.host;
-       test['port'] = uri.port.toString();
-       test['path'] = uri.path;
-
-      // Attempt WebSocket connection with timeout
-      final channel = WebSocketChannel.connect(uri);
-      
-      // Set up a timer for timeout
-      bool completed = false;
-      Timer(const Duration(seconds: 10), () {
-        if (!completed) {
-          test['status'] = 'timeout';
-          test['error'] = 'WebSocket connection timed out after 10 seconds';
-          channel.sink.close(status.normalClosure);
-        }
-      });
-
-      // Try to establish connection
-      await channel.ready.timeout(const Duration(seconds: 10));
-      
-      completed = true;
-      test['status'] = 'success';
-      test['message'] = 'WebSocket connection established successfully';
-      
-      // Send a test message
-      channel.sink.add(jsonEncode({
-        'type': 'test',
-        'simNumber': config.simNumber,
-        'timestamp': DateTime.now().millisecondsSinceEpoch,
-      }));
-      
-      // Close the connection
-      await channel.sink.close(status.normalClosure);
-      
-    } catch (e) {
-      test['status'] = 'failed';
-      test['error'] = e.toString();
-      
-      // Analyze the error type
-      if (e.toString().contains('Connection refused')) {
-        test['errorType'] = 'connection_refused';
-        test['diagnosis'] = 'Server is not accepting connections on port ${config.inputPort}';
-      } else if (e.toString().contains('Failed to connect WebSocket')) {
-        test['errorType'] = 'websocket_handshake_failed';
-        test['diagnosis'] = 'Server does not support WebSocket protocol';
-      } else if (e.toString().contains('Empty reply from server')) {
-        test['errorType'] = 'no_response';
-        test['diagnosis'] = 'Server is not running WebSocket service on this port';
-      } else {
-        test['errorType'] = 'unknown';
-        test['diagnosis'] = 'Unknown WebSocket connection error';
-      }
-    }
-    
-    test['endTime'] = DateTime.now().toIso8601String();
-  }
+  
 
   static Future<void> _testAlternativePorts(
     StreamConfig config, 
@@ -182,21 +112,92 @@ class ConnectionTester {
     final test = <String, dynamic>{
       'status': 'testing',
       'startTime': DateTime.now().toIso8601String(),
+      'url': config.rtmpStreamUrl,
     };
-    tests['RTMP Server Check'] = test;
+    tests['RTMP Server Connection'] = test;
 
     try {
-      // Test RTMP port (usually 1935)
-      final socket = await Socket.connect(config.inputHost, 1935, timeout: const Duration(seconds: 5));
+      // Test RTMP port connectivity
+      final socket = await Socket.connect(config.inputHost, config.inputPort, timeout: const Duration(seconds: 5));
       socket.destroy();
       
       test['status'] = 'success';
-      test['message'] = 'RTMP port (1935) is accessible';
-      test['recommendation'] = 'Your server might expect RTMP instead of WebRTC';
+      test['message'] = 'RTMP server is accessible on port ${config.inputPort}';
+      test['rtmpUrl'] = config.rtmpStreamUrl;
+      test['recommendation'] = 'Server ready for RTMP streaming';
     } catch (e) {
       test['status'] = 'failed';
       test['error'] = e.toString();
-      test['message'] = 'RTMP port (1935) is not accessible';
+      test['message'] = 'RTMP server not accessible on port ${config.inputPort}';
+      
+      // Try standard RTMP port 1935 if different
+      if (config.inputPort != 1935) {
+        try {
+          final socket1935 = await Socket.connect(config.inputHost, 1935, timeout: const Duration(seconds: 5));
+          socket1935.destroy();
+          test['alternativePort'] = 1935;
+          test['recommendation'] = 'RTMP server might be on standard port 1935 instead of ${config.inputPort}';
+        } catch (e1935) {
+          test['port1935Error'] = e1935.toString();
+        }
+      }
+    }
+    
+    test['endTime'] = DateTime.now().toIso8601String();
+  }
+
+  static Future<void> _testRTMPHTTPPaths(
+    StreamConfig config, 
+    Map<String, dynamic> tests
+  ) async {
+    final test = <String, dynamic>{
+      'status': 'testing',
+      'startTime': DateTime.now().toIso8601String(),
+    };
+    tests['RTMP HTTP Paths'] = test;
+
+    try {
+      // Test different RTMP path structures
+      final testPaths = [
+        '/hls/${config.streamKey}',
+        '/live/${config.streamKey}',
+        '/stream/${config.streamKey}',
+        '/${config.streamKey}',
+      ];
+
+      final workingPaths = <String>[];
+      
+      for (final path in testPaths) {
+        try {
+          final testUrl = 'http://${config.inputHost}:${config.outputPort}$path';
+          final client = HttpClient();
+          client.connectionTimeout = const Duration(seconds: 3);
+          
+          final request = await client.openUrl('GET', Uri.parse(testUrl));
+          final response = await request.close();
+          
+          if (response.statusCode < 500) {
+            workingPaths.add(path);
+          }
+          
+          client.close();
+        } catch (e) {
+          // Path not working, continue
+        }
+      }
+
+      if (workingPaths.isNotEmpty) {
+        test['status'] = 'success';
+        test['workingPaths'] = workingPaths;
+        test['message'] = 'Found working RTMP paths: ${workingPaths.join(', ')}';
+      } else {
+        test['status'] = 'info';
+        test['message'] = 'No HTTP paths responded (normal for RTMP-only server)';
+      }
+      
+    } catch (e) {
+      test['status'] = 'failed';
+      test['error'] = e.toString();
     }
     
     test['endTime'] = DateTime.now().toIso8601String();

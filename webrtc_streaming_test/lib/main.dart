@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'webrtc_streaming_page.dart';
+import 'rtmp_streaming_page.dart';
 
 void main() {
   runApp(const WebRTCStreamingApp());
@@ -141,7 +141,7 @@ class _HomePageState extends State<HomePage> {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const WebRTCStreamingPage(),
+                      builder: (context) => const RTMPStreamingPage(),
                     ),
                   );
                 },
