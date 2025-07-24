@@ -39,8 +39,8 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   @override
   void initState() {
     super.initState();
-    // Pre-fill with the example URL
-    _urlController.text = 'http://47.130.109.65:8080/hls/mystream.flv';
+    // Pre-fill with a working test URL
+    _urlController.text = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
   }
 
   @override
@@ -93,7 +93,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
         _isLoading = false;
         _isPlaying = false;
       });
-      _showError('Error loading video: ${e.toString()}');
+      
+      String errorMessage = 'Error loading video: ';
+      
+      if (e.toString().contains('NetworkException') || 
+          e.toString().contains('SocketException') ||
+          e.toString().contains('HttpException')) {
+        errorMessage += 'Network error. Check if the URL is accessible and supports CORS.';
+      } else if (e.toString().contains('FormatException')) {
+        errorMessage += 'Invalid video format. Try HLS (.m3u8), MP4, or FLV streams.';
+      } else if (e.toString().contains('PlatformException')) {
+        errorMessage += 'Platform error. This format may not be supported on web.';
+      } else {
+        errorMessage += e.toString();
+      }
+      
+      _showError(errorMessage);
     }
   }
 
@@ -158,6 +173,31 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     }
   }
 
+  Widget _buildTestUrlButton(String title, String url) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4.0),
+      child: SizedBox(
+        width: double.infinity,
+        child: TextButton(
+          onPressed: () {
+            _urlController.text = url;
+          },
+          style: TextButton.styleFrom(
+            alignment: Alignment.centerLeft,
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          ),
+          child: Text(
+            '$title\n$url',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).primaryColor,
+            ),
+            textAlign: TextAlign.left,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -192,6 +232,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                         hintText: 'Enter HLS stream URL (e.g., .m3u8, .flv)',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.link),
+                        helperText: 'Try: https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
                       ),
                       keyboardType: TextInputType.url,
                     ),
@@ -225,6 +266,29 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                         ),
                       ],
                     ),
+                  ],
+                ),
+              ),
+            ),
+            
+            // Working Test URLs Section
+            Card(
+              elevation: 2,
+              child: Padding(
+                padding: const EdgeInsets.all(12.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Working Test URLs:',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    _buildTestUrlButton('HLS Test Stream', 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'),
+                    _buildTestUrlButton('Big Buck Bunny MP4', 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'),
+                    _buildTestUrlButton('Sintel MP4', 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4'),
                   ],
                 ),
               ),
