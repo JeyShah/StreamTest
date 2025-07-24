@@ -18,8 +18,8 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
   @override
   void initState() {
     super.initState();
-    // Pre-fill with your server's output URL
-    _urlController.text = 'http://47.130.109.65:8080/hls/923244219594.flv';
+    // Pre-fill with your server's output URL (matching your ffmpeg command)
+    _urlController.text = 'http://47.130.109.65:8080/hls/mystream.flv';
   }
 
   @override
@@ -42,24 +42,67 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
 
     try {
       final uri = Uri.parse(url);
-      final response = await http.head(uri).timeout(const Duration(seconds: 10));
+      
+      // Try HEAD request first (faster)
+      var response = await http.head(uri).timeout(const Duration(seconds: 10));
       
       if (response.statusCode == 200) {
         setState(() {
           _playerStatus = 'Stream URL is accessible ✅';
         });
         _showMessage('Stream URL is valid and accessible!');
-      } else {
-        setState(() {
-          _playerStatus = 'Stream not accessible (${response.statusCode})';
-        });
-        _showMessage('Stream returned status code: ${response.statusCode}');
+        return;
       }
+      
+      // If HEAD fails, try GET request (some servers don't support HEAD)
+      if (response.statusCode == 405 || response.statusCode == 404) {
+        response = await http.get(uri).timeout(const Duration(seconds: 10));
+        
+        if (response.statusCode == 200) {
+          setState(() {
+            _playerStatus = 'Stream URL is accessible ✅ (via GET)';
+          });
+          _showMessage('Stream URL is valid and accessible!');
+          return;
+        }
+      }
+      
+      setState(() {
+        _playerStatus = 'Stream not accessible (${response.statusCode})';
+      });
+      
+      // Provide specific guidance based on status code
+      String message = 'Stream returned status code: ${response.statusCode}';
+      if (response.statusCode == 404) {
+        message += '\n\n💡 Stream might not be active yet. Make sure your FFmpeg command is running:\nffmpeg -re -i /Users/mac/Downloads/IK.mp4 -c copy -f flv rtmp://47.130.109.65/hls/mystream';
+      } else if (response.statusCode == 403) {
+        message += '\n\n💡 Access forbidden. Check server permissions.';
+      }
+      
+      _showDetailedMessage('Stream Test Result', message);
+      
     } catch (e) {
       setState(() {
         _playerStatus = 'Stream test failed ❌';
       });
-      _showMessage('Error testing stream: $e');
+      
+      String errorMessage = 'Error testing stream: $e';
+      
+      // Provide specific guidance for common errors
+      if (e.toString().contains('ClientException')) {
+        errorMessage += '\n\n💡 Possible causes:\n';
+        errorMessage += '• Stream is not active (run your FFmpeg command first)\n';
+        errorMessage += '• Server is not responding\n';
+        errorMessage += '• Network connectivity issues\n';
+        errorMessage += '• Wrong URL or port\n\n';
+        errorMessage += '🔧 Try this:\n';
+        errorMessage += '1. Make sure FFmpeg is streaming:\n';
+        errorMessage += '   ffmpeg -re -i /Users/mac/Downloads/IK.mp4 -c copy -f flv rtmp://47.130.109.65/hls/mystream\n';
+        errorMessage += '2. Wait a few seconds for stream to start\n';
+        errorMessage += '3. Test the URL again';
+      }
+      
+      _showDetailedMessage('Stream Test Failed', errorMessage);
     }
   }
 
@@ -241,6 +284,38 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
     );
   }
 
+  void _showDetailedMessage(String title, String message) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Row(
+            children: [
+              Icon(
+                title.contains('Failed') ? Icons.error : Icons.info,
+                color: title.contains('Failed') ? Colors.red : Colors.blue,
+              ),
+              const SizedBox(width: 8),
+              Text(title),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: SelectableText(
+              message,
+              style: const TextStyle(fontSize: 14),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showPresetUrls() {
     showDialog(
       context: context,
@@ -259,15 +334,21 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
                 const SizedBox(height: 16),
                 
                 _buildPresetTile(
-                  '🎬 Your Server (HTTP-FLV)',
-                  'http://47.130.109.65:8080/hls/923244219594.flv',
-                  'Direct stream from your RTMP server',
+                  '🎬 Your Stream (HTTP-FLV)',
+                  'http://47.130.109.65:8080/hls/mystream.flv',
+                  'Your current stream: mystream',
                 ),
                 
                 _buildPresetTile(
-                  '📺 Your Server (HLS)',
-                  'http://47.130.109.65:8080/hls/923244219594.m3u8',
-                  'HLS stream from your server',
+                  '📺 Your Stream (HLS)',
+                  'http://47.130.109.65:8080/hls/mystream.m3u8',
+                  'HLS format of your stream',
+                ),
+                
+                _buildPresetTile(
+                  '🔑 Default Stream Key',
+                  'http://47.130.109.65:8080/hls/923244219594.flv',
+                  'Default stream key from config',
                 ),
                 
                 _buildPresetTile(
@@ -450,6 +531,63 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
             
             const SizedBox(height: 24),
             
+            // FFmpeg Command Card
+            Card(
+              color: Colors.green.shade50,
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.terminal, color: Colors.green),
+                        SizedBox(width: 8),
+                        Text(
+                          'Start Your Stream First',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Run this command in terminal to start streaming:',
+                      style: TextStyle(fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
+                      child: const SelectableText(
+                        'ffmpeg -re -i /Users/mac/Downloads/IK.mp4 -c copy -f flv rtmp://47.130.109.65/hls/mystream',
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontSize: 12,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '⏳ Wait a few seconds after starting FFmpeg, then test the URL above',
+                      style: TextStyle(
+                        fontStyle: FontStyle.italic,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            const SizedBox(height: 16),
+            
             // Instructions Card
             Card(
               color: Colors.blue.shade50,
@@ -472,10 +610,10 @@ class _StreamPlayerPageState extends State<StreamPlayerPage> {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    const Text('1. Enter your stream URL in the text field above'),
-                    const Text('2. Tap "Test URL" to verify the stream is accessible'),
-                    const Text('3. Tap "Play Stream" to launch the player'),
-                    const Text('4. Use "Stream Presets" for common URLs'),
+                    const Text('1. Start your FFmpeg stream (see command above)'),
+                    const Text('2. Enter or verify the stream URL'),
+                    const Text('3. Tap "Test URL" to verify the stream is accessible'),
+                    const Text('4. Tap "Play Stream" to launch the player'),
                     const SizedBox(height: 8),
                     Text(
                       '💡 Supports: HTTP-FLV, HLS (.m3u8), RTMP, MP4, and more',
