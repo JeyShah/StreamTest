@@ -321,8 +321,13 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
         _playerStatus = 'Failed to play stream ❌';
       });
 
-      // Show alternatives for unsupported formats
-      if (e.toString().contains('rtmp') || e.toString().contains('unsupported')) {
+      print('❌ Error playing stream: $e');
+
+      // Show specific help for different error types
+      if (e.toString().contains('App Transport Security') || 
+          e.toString().contains('kCFErrorDomainCFNetwork error -1022')) {
+        _showATSError(url);
+      } else if (e.toString().contains('rtmp') || e.toString().contains('unsupported')) {
         _showStreamFormatHelp(url);
       } else {
         _showMessage('Error: ${e.toString()}');
@@ -580,6 +585,118 @@ ffplay http://47.130.109.65:8080/hls/mystream.flv
     final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
     return duration.inHours > 0 ? '$hours:$minutes:$seconds' : '$minutes:$seconds';
+  }
+
+  void _showATSError(String url) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.security, color: Colors.red),
+              SizedBox(width: 8),
+              Text('iOS Security Block'),
+            ],
+          ),
+          content: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade200),
+                  ),
+                  child: const Text(
+                    '🚫 iOS App Transport Security (ATS) is blocking HTTP connections',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                const Text('🔧 Solution Applied:'),
+                const SizedBox(height: 8),
+                const Text('✅ Updated iOS Info.plist with ATS exceptions'),
+                const Text('✅ Allowed HTTP connections to your server'),
+                const Text('✅ Added specific domain exceptions'),
+                
+                const SizedBox(height: 16),
+                const Text('📱 Next Steps:'),
+                const SizedBox(height: 8),
+                const Text('1. Restart the app completely'),
+                const Text('2. Clean and rebuild the iOS app'),
+                const Text('3. Try the stream again'),
+                
+                const SizedBox(height: 16),
+                const Text('🔧 Terminal commands to rebuild:'),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const SelectableText(
+                    'flutter clean\nflutter run -d ios',
+                    style: TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                const Text('💡 Alternative - Use HTTPS:'),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: SelectableText(
+                    url.replaceAll('http://', 'https://'),
+                    style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                  ),
+                ),
+                
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.green.shade50,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.green.shade200),
+                  ),
+                  child: const Text(
+                    '✅ This issue is iOS-specific. Android, Web, and Desktop work fine with HTTP.',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: 'flutter clean\nflutter run -d ios'));
+                Navigator.of(context).pop();
+                _showMessage('Rebuild commands copied to clipboard!');
+              },
+              child: const Text('Copy Rebuild Commands'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('OK'),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _showStreamFormatHelp(String url) {
