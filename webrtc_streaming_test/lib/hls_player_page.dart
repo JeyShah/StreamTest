@@ -2,8 +2,8 @@ import 'dart:html' as html;
 import 'dart:async';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'web/web_view_factory.dart'
-  if (dart.library.io) 'web_view_factory_stub.dart';
-  if (dart.library.html) 'web/web_view_factory.dart'
+  if (dart.library.io) 'web_view_factory_stub.dart'
+  if (dart.library.html) 'web/web_view_factory.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:chewie/chewie.dart';
