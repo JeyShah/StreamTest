@@ -488,20 +488,21 @@ class _RTMPStreamingPageState extends State<RTMPStreamingPage> {
               color: Colors.black,
               child: Center(
                 child: _rtmpService?.getCameraPreview() ?? 
-                  const Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.camera_alt, size: 64, color: Colors.white54),
-                      SizedBox(height: 16),
-                      Text(
-                        'Camera Preview',
-                        style: TextStyle(color: Colors.white54, fontSize: 18),
+                  Container(
+                    color: Colors.grey.shade300,
+                    child: const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.camera_alt, size: 64, color: Colors.grey),
+                          SizedBox(height: 16),
+                          Text(
+                            'Initializing Camera...',
+                            style: TextStyle(color: Colors.grey, fontSize: 18),
+                          ),
+                        ],
                       ),
-                      Text(
-                        'Initializing camera...',
-                        style: TextStyle(color: Colors.white54, fontSize: 14),
-                      ),
-                    ],
+                    ),
                   ),
               ),
             ),
