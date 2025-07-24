@@ -17,8 +17,8 @@ class _RTMPStreamingPageState extends State<RTMPStreamingPage> {
   RTMPStreamingService? _rtmpService;
   
   bool _isStreaming = false;
-  String _connectionStatus = 'Disconnected';
-  String _streamingStatus = 'Ready';
+  String _connectionStatus = 'Not connected';
+  String _streamingStatus = 'Camera off - Ready to preview';
   
   // Controllers for configuration
   final TextEditingController _hostController = TextEditingController();
@@ -149,18 +149,19 @@ class _RTMPStreamingPageState extends State<RTMPStreamingPage> {
   Future<void> _startStreaming() async {
     try {
       setState(() {
-        _connectionStatus = 'Connecting...';
-        _streamingStatus = 'Starting...';
+        _connectionStatus = 'Initializing...';
+        _streamingStatus = 'Starting camera...';
       });
 
       await _rtmpService!.startStreaming();
 
       setState(() {
         _isStreaming = true;
-        _connectionStatus = 'Connected';
+        _connectionStatus = 'Ready';
+        _streamingStatus = 'Camera active - Use FFmpeg to stream';
       });
 
-      debugPrint('🎯 RTMP streaming started');
+      debugPrint('🎯 Camera preview started');
       debugPrint('📡 RTMP URL: ${_streamConfig.rtmpStreamUrl}');
       debugPrint('📺 Stream Key: ${_streamConfig.streamKey}');
       debugPrint('🎬 Output URL: ${_streamConfig.outputUrl}');
@@ -517,8 +518,8 @@ class _RTMPStreamingPageState extends State<RTMPStreamingPage> {
                   children: [
                     ElevatedButton.icon(
                       onPressed: _isStreaming ? _stopStreaming : _startStreaming,
-                      icon: Icon(_isStreaming ? Icons.stop : Icons.play_arrow),
-                      label: Text(_isStreaming ? 'Stop Stream' : 'Start Stream'),
+                      icon: Icon(_isStreaming ? Icons.stop : Icons.camera_alt),
+                      label: Text(_isStreaming ? 'Stop Preview' : 'Start Preview'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: _isStreaming ? Colors.red : Colors.green,
                         foregroundColor: Colors.white,
@@ -527,8 +528,8 @@ class _RTMPStreamingPageState extends State<RTMPStreamingPage> {
                     ),
                     ElevatedButton.icon(
                       onPressed: _showFFmpegInstructions,
-                      icon: const Icon(Icons.code),
-                      label: const Text('FFmpeg'),
+                      icon: const Icon(Icons.terminal),
+                      label: const Text('Get Commands'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.blue,
                         foregroundColor: Colors.white,
