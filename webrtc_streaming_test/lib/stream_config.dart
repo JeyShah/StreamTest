@@ -1,7 +1,7 @@
 class StreamConfig {
-  // Your specific server configuration
+  // Your specific server configuration for RTMP streaming
   static const String inputServerIP = "47.130.109.65";
-  static const int inputServerPort = 1078;
+  static const int inputServerPort = 1935; // RTMP standard port
   static const String outputServerIP = "47.130.109.65";
   static const int outputServerPort = 8080;
   
@@ -10,38 +10,38 @@ class StreamConfig {
   final String outputHost;
   final int outputPort;
   final String protocol;
-  final String simNumber;
+  final String streamKey;
   
   StreamConfig({
     this.inputHost = inputServerIP,
     this.inputPort = inputServerPort,
     this.outputHost = outputServerIP,
     this.outputPort = outputServerPort,
-    this.protocol = 'ws',
-    this.simNumber = '923244219594', // Default SIM number
+    this.protocol = 'rtmp',
+    this.streamKey = '923244219594', // Default stream key (using SIM number)
   });
   
-  // WebRTC input streaming URL (where app sends video with SIM number)
-  String get inputUrl => '$protocol://$inputHost:$inputPort/$simNumber';
+  // RTMP input streaming URL (where app sends video)
+  String get inputUrl => '$protocol://$inputHost/hls/$streamKey';
   
-  // Output streaming URL (where you watch the stream)
-  String get outputUrl => 'http://$outputHost:$outputPort/$simNumber/1.m3u8';
+  // Output streaming URL (where you watch the stream)  
+  String get outputUrl => 'http://$outputHost:$outputPort/hls/$streamKey.flv';
   
-  // WebRTC signaling URL for streaming
-  String get webrtcSignalingUrl => 'ws://$inputHost:$inputPort';
+  // RTMP streaming URL for publishing
+  String get rtmpStreamUrl => 'rtmp://$inputHost/hls/$streamKey';
   
   // Display-friendly URLs
-  String get inputDisplayUrl => '$inputHost:$inputPort';
-  String get outputDisplayUrl => '$outputHost:$outputPort/$simNumber/1.m3u8';
+  String get inputDisplayUrl => '$inputHost/hls/$streamKey';
+  String get outputDisplayUrl => '$outputHost:$outputPort/hls/$streamKey.flv';
   
   // Predefined configurations for your server
-  static StreamConfig yourServer({String simNumber = '923244219594'}) => StreamConfig(
+  static StreamConfig yourServer({String streamKey = '923244219594'}) => StreamConfig(
     inputHost: inputServerIP,
     inputPort: inputServerPort,
     outputHost: outputServerIP,
     outputPort: outputServerPort,
-    protocol: 'ws',
-    simNumber: simNumber,
+    protocol: 'rtmp',
+    streamKey: streamKey,
   );
   
   // Test if this is your specific server
@@ -57,7 +57,7 @@ class StreamConfig {
     'outputHost': outputHost,
     'outputPort': outputPort,
     'protocol': protocol,
-    'simNumber': simNumber,
+    'streamKey': streamKey,
   };
   
       factory StreamConfig.fromJson(Map<String, dynamic> json) => StreamConfig(
@@ -65,8 +65,8 @@ class StreamConfig {
     inputPort: json['inputPort'] ?? inputServerPort,
     outputHost: json['outputHost'] ?? outputServerIP,
     outputPort: json['outputPort'] ?? outputServerPort,
-    protocol: json['protocol'] ?? 'ws',
-    simNumber: json['simNumber'] ?? '923244219594',
+    protocol: json['protocol'] ?? 'rtmp',
+    streamKey: json['streamKey'] ?? '923244219594',
   );
   
   @override
