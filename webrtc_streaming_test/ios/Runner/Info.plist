@@ -54,31 +54,15 @@
 	<!-- App Transport Security Settings for HTTP Streams -->
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<!-- Allow all insecure HTTP loads (for development/testing) -->
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-		<!-- Specific domain exceptions for your streaming server -->
-		<key>NSExceptionDomains</key>
+  	<key>NSAllowsArbitraryLoads</key>
+  	<true/>
+  	<key>NSExceptionDomains</key>
 		<dict>
 			<key>47.130.109.65</key>
 			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<key>NSIncludesSubdomains</key>
 				<true/>
-				<key>NSExceptionMinimumTLSVersion</key>
-				<string>1.0</string>
-				<key>NSExceptionRequiresForwardSecrecy</key>
-				<false/>
-			</dict>
-			<!-- Allow localhost for testing -->
-			<key>localhost</key>
-			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
-				<true/>
-			</dict>
-			<!-- Allow common streaming domains -->
-			<key>commondatastorage.googleapis.com</key>
-			<dict>
-				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<key>NSTemporaryExceptionAllowsInsecureHTTPLoads</key>
 				<true/>
 			</dict>
 		</dict>
