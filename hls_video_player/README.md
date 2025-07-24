@@ -106,15 +106,19 @@ The app is configured to allow HTTP traffic for streaming compatibility:
 
 ### Example Stream URLs
 
-The app comes pre-configured with an example stream URL:
+The app comes pre-configured with a working test stream URL and includes several working examples:
+
+**Pre-loaded Test Stream:**
 ```
-http://47.130.109.65:8080/hls/mystream.flv
+https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8
 ```
 
-You can test with other stream formats:
-- HLS: `https://example.com/stream.m3u8`
-- MP4: `https://example.com/video.mp4`
-- Other formats supported by the video_player plugin
+**Additional Working Test URLs (clickable in the app):**
+- HLS: `https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8`
+- MP4: `https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4`
+- MP4: `https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4`
+
+**Important Note:** The URL `https://test-streams.mux.dev/bbb-360p.m3u8` is not working (returns 404). Use the working test URLs provided above.
 
 ## Architecture
 
