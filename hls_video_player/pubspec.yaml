@@ -38,6 +38,7 @@ dependencies:
   
   # Video player dependencies
   video_player: ^2.8.1
+  flutter_vlc_player: ^7.4.1
   
   # HTTP requests for stream validation
   http: ^1.1.0

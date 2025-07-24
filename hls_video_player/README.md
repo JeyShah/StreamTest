@@ -6,21 +6,23 @@ A cross-platform Flutter application that can play HLS streams and other video f
 
 - 🎥 **Multi-format Support**: Plays HLS (.m3u8), FLV, MP4, and other video stream formats
 - 🌐 **Cross-Platform**: Works on Android, iOS, macOS, web, and can be packaged as a Chrome extension
-- 🎮 **Custom Controls**: Built-in video controls with play/pause, volume, progress bar, and time display
+- 🎮 **Dual Player Support**: VLC Player for superior HLS support on mobile/desktop, standard video player for web
 - 📱 **Responsive Design**: Adapts to different screen sizes and orientations
 - 🔗 **URL Input**: Easy-to-use interface for entering stream URLs
 - 🚫 **Error Handling**: Comprehensive error handling and user feedback
 - 🎨 **Modern UI**: Clean, Material Design 3 interface
+- ⚡ **Advanced HLS Support**: VLC player provides excellent HLS stream compatibility and performance
 
 ## Screenshots
 
 The app includes:
-- URL input field with validation
+- URL input field with validation and working test URLs
 - Play/Stop buttons for stream control
+- Player selection toggle (VLC vs Standard) on mobile/desktop
 - Full-featured video player with custom controls
-- Progress bar with scrubbing support
+- VLC Player: Superior HLS support, hardware acceleration, advanced options
+- Standard Player: Web compatibility, built-in Flutter video support
 - Volume control and mute functionality
-- Time display (current/total duration)
 - Error handling with user-friendly messages
 
 ## Supported Platforms
@@ -193,7 +195,8 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Dependencies
 
 - `flutter`: SDK
-- `video_player`: ^2.8.1
+- `video_player`: ^2.8.1 (Web and fallback support)
+- `flutter_vlc_player`: ^7.4.1 (Advanced HLS support for mobile/desktop)
 - `http`: ^1.1.0
 - `cupertino_icons`: ^1.0.6
 
