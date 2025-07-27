@@ -4,49 +4,8 @@ import 'package:video_player/video_player.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 
 void main() {
-  try {
-    WidgetsFlutterBinding.ensureInitialized();
-    runApp(const HLSVideoPlayerApp());
-  } catch (e) {
-    debugPrint('Error initializing app: $e');
-    // Try to run with minimal initialization
-    runApp(
-      MaterialApp(
-        home: Scaffold(
-          body: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.error, size: 64, color: Colors.red),
-                const SizedBox(height: 16),
-                const Text(
-                  'Initialization Error',
-                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Error: $e',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 14),
-                ),
-                const SizedBox(height: 16),
-                ElevatedButton(
-                  onPressed: () {
-                    // Try to reload
-                    if (kIsWeb) {
-                      // On web, reload the page
-                      // window.location.reload();
-                    }
-                  },
-                  child: const Text('Retry'),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const HLSVideoPlayerApp());
 }
 
 class HLSVideoPlayerApp extends StatelessWidget {
@@ -79,22 +38,26 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
   bool _isLoading = false;
   bool _isPlaying = false;
   String? _errorMessage;
-  bool _showControls = true;
-  bool _useVlcPlayer = true;
+  String _currentPlayer = 'None';
 
   @override
   void initState() {
     super.initState();
-    // Pre-fill with a working test URL
     _urlController.text = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
   }
 
   @override
   void dispose() {
-    _videoPlayerController?.dispose();
-    _vlcPlayerController?.dispose();
+    _cleanup();
     _urlController.dispose();
     super.dispose();
+  }
+
+  void _cleanup() {
+    _videoPlayerController?.dispose();
+    _vlcPlayerController?.dispose();
+    _videoPlayerController = null;
+    _vlcPlayerController = null;
   }
 
   Future<void> _playVideo() async {
@@ -108,103 +71,73 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     setState(() {
       _isLoading = true;
       _errorMessage = null;
+      _currentPlayer = 'Loading...';
     });
 
     try {
-      if (_useVlcPlayer && !kIsWeb) {
-        // Use VLC player for better HLS support on mobile/desktop
-        await _playWithVlc(url);
-      } else {
-        // Use video_player for web or as fallback
+      _cleanup();
+
+      if (kIsWeb) {
         await _playWithVideoPlayer(url);
+      } else {
+        // Try VLC first for better HLS support on mobile/desktop
+        try {
+          await _playWithVlc(url);
+        } catch (e) {
+          debugPrint('VLC failed, falling back to video_player: $e');
+          await _playWithVideoPlayer(url);
+        }
       }
     } catch (e) {
       setState(() {
         _isLoading = false;
         _isPlaying = false;
+        _currentPlayer = 'Error';
       });
-      
-      String errorMessage = 'Error loading video: ';
-      
-      if (e.toString().contains('NetworkException') || 
-          e.toString().contains('SocketException') ||
-          e.toString().contains('HttpException')) {
-        errorMessage += 'Network error. Check if the URL is accessible and supports CORS.';
-      } else if (e.toString().contains('FormatException')) {
-        errorMessage += 'Invalid video format. Try HLS (.m3u8), MP4, or FLV streams.';
-      } else if (e.toString().contains('PlatformException')) {
-        errorMessage += 'Platform error. This format may not be supported on web.';
-      } else {
-        errorMessage += e.toString();
-      }
-      
-      _showError(errorMessage);
+      _showError('Error loading video: ${e.toString()}');
     }
   }
 
   Future<void> _playWithVlc(String url) async {
-    try {
-      // Dispose of previous controllers
-      await _videoPlayerController?.dispose();
-      _vlcPlayerController?.dispose();
-      
-      setState(() {
-        _videoPlayerController = null;
-      });
+    _vlcPlayerController = VlcPlayerController.network(
+      url,
+      hwAcc: HwAcc.full,
+      autoPlay: true,
+      options: VlcPlayerOptions(
+        advanced: VlcAdvancedOptions([
+          VlcAdvancedOptions.networkCaching(3000),
+        ]),
+        video: VlcVideoOptions([
+          VlcVideoOptions.dropLateFrames(true),
+          VlcVideoOptions.skipFrames(true),
+        ]),
+      ),
+    );
 
-      // Create VLC player controller
-      _vlcPlayerController = VlcPlayerController.network(
-        url,
-        hwAcc: HwAcc.full,
-        autoPlay: true,
-        options: VlcPlayerOptions(
-          advanced: VlcAdvancedOptions([
-            VlcAdvancedOptions.networkCaching(2000),
-            VlcAdvancedOptions.clockJitter(0),
-          ]),
-          video: VlcVideoOptions([
-            VlcVideoOptions.dropLateFrames(true),
-            VlcVideoOptions.skipFrames(true),
-          ]),
-          sout: VlcStreamOutputOptions([
-            VlcStreamOutputOptions.soutMuxCaching(2000),
-          ]),
-          rtp: VlcRtpOptions([
-            VlcRtpOptions.rtpOverRtsp(true),
-          ]),
-        ),
-      );
-
-      // Add listeners
-      _vlcPlayerController!.addOnInitListener(() async {
+    _vlcPlayerController!.addOnInitListener(() {
+      if (mounted) {
         setState(() {
           _isLoading = false;
           _isPlaying = true;
+          _currentPlayer = 'VLC Player';
         });
-      });
+      }
+    });
 
-      _vlcPlayerController!.addOnRendererEventListener((type, id, name) {
-        // Renderer event listener for debugging
-      });
+    // Add general state listener
+    _vlcPlayerController!.addListener(() {
+      if (mounted && _vlcPlayerController != null) {
+        final isPlaying = _vlcPlayerController!.value.isPlaying;
+        setState(() {
+          _isPlaying = isPlaying;
+        });
+      }
+    });
 
-      await _vlcPlayerController!.initialize();
-    } catch (e) {
-      // If VLC fails, fall back to standard player
-      debugPrint('VLC Player failed to initialize: $e');
-      await _playWithVideoPlayer(url);
-    }
+    await _vlcPlayerController!.initialize();
   }
 
   Future<void> _playWithVideoPlayer(String url) async {
-    // Dispose of previous controllers
-    await _videoPlayerController?.dispose();
-    _vlcPlayerController?.dispose();
-    
-    setState(() {
-      _vlcPlayerController = null;
-    });
-
-    // Create video player controller
     _videoPlayerController = VideoPlayerController.networkUrl(
       Uri.parse(url),
       httpHeaders: {
@@ -212,51 +145,51 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       },
     );
 
-    // Add listener for player state changes
-    _videoPlayerController!.addListener(_videoPlayerListener);
+    _videoPlayerController!.addListener(() {
+      if (mounted) {
+        setState(() {
+          _isPlaying = _videoPlayerController!.value.isPlaying;
+        });
+        
+        // Check for errors
+        if (_videoPlayerController!.value.hasError) {
+          _showError('Video player error: ${_videoPlayerController!.value.errorDescription}');
+        }
+      }
+    });
 
-    // Initialize the video player
     await _videoPlayerController!.initialize();
-
-    // Start playing
     await _videoPlayerController!.play();
 
     setState(() {
       _isLoading = false;
       _isPlaying = true;
+      _currentPlayer = kIsWeb ? 'Web Player' : 'Standard Player';
     });
-  }
-
-  void _videoPlayerListener() {
-    if (_videoPlayerController != null) {
-      setState(() {
-        _isPlaying = _videoPlayerController!.value.isPlaying;
-      });
-    }
   }
 
   void _showError(String message) {
     setState(() {
       _errorMessage = message;
     });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
-    );
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          backgroundColor: Colors.red,
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    }
   }
 
   void _stopVideo() {
     _videoPlayerController?.pause();
-    _videoPlayerController?.dispose();
-    _vlcPlayerController?.stop();
-    _vlcPlayerController?.dispose();
+    _vlcPlayerController?.pause();
+    
     setState(() {
-      _videoPlayerController = null;
-      _vlcPlayerController = null;
       _isPlaying = false;
-      _errorMessage = null;
+      _currentPlayer = 'Stopped';
     });
   }
 
@@ -267,43 +200,12 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       } else {
         _vlcPlayerController!.play();
       }
-      setState(() {
-        _isPlaying = !_isPlaying;
-      });
     } else if (_videoPlayerController != null) {
       if (_videoPlayerController!.value.isPlaying) {
         _videoPlayerController!.pause();
       } else {
         _videoPlayerController!.play();
       }
-    }
-  }
-
-  void _toggleMute() {
-    if (_vlcPlayerController != null) {
-      _vlcPlayerController!.getVolume().then((volume) {
-        final currentVolume = volume ?? 0;
-        _vlcPlayerController!.setVolume(currentVolume > 0 ? 0 : 100);
-      });
-    } else if (_videoPlayerController != null) {
-      final currentVolume = _videoPlayerController!.value.volume;
-      _videoPlayerController!.setVolume(currentVolume > 0 ? 0.0 : 1.0);
-      setState(() {});
-    }
-  }
-
-
-
-  String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
-    
-    if (hours > 0) {
-      return '$hours:${twoDigits(minutes)}:${twoDigits(seconds)}';
-    } else {
-      return '$minutes:${twoDigits(seconds)}';
     }
   }
 
@@ -354,7 +256,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Stream URL',
+                      'HLS Stream URL (.m3u8)',
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -363,10 +265,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                     TextField(
                       controller: _urlController,
                       decoration: const InputDecoration(
-                        hintText: 'Enter HLS stream URL (e.g., .m3u8, .flv)',
+                        hintText: 'Enter HLS stream URL (e.g., .m3u8)',
                         border: OutlineInputBorder(),
                         prefixIcon: Icon(Icons.link),
-                        helperText: 'Try: https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8',
                       ),
                       keyboardType: TextInputType.url,
                     ),
@@ -380,9 +281,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                                 ? const SizedBox(
                                     width: 20,
                                     height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
+                                    child: CircularProgressIndicator(strokeWidth: 2),
                                   )
                                 : const Icon(Icons.play_arrow),
                             label: Text(_isLoading ? 'Loading...' : 'Play Stream'),
@@ -390,41 +289,33 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                         ),
                         const SizedBox(width: 8),
                         ElevatedButton.icon(
-                          onPressed: _videoPlayerController != null ? _stopVideo : null,
+                          onPressed: _isPlaying ? _stopVideo : null,
                           icon: const Icon(Icons.stop),
                           label: const Text('Stop'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.red,
                             foregroundColor: Colors.white,
                           ),
-                                                  ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      // Player selection
-                      if (!kIsWeb) ...[
-                        Row(
-                          children: [
-                            Text(
-                              'Player: ',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                            Switch(
-                              value: _useVlcPlayer,
-                              onChanged: (value) {
-                                setState(() {
-                                  _useVlcPlayer = value;
-                                });
-                              },
-                            ),
-                            Text(
-                              _useVlcPlayer ? 'VLC (Better HLS)' : 'Standard',
-                              style: Theme.of(context).textTheme.bodySmall,
-                            ),
-                          ],
                         ),
                       ],
-                    ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text(
+                          'Status: ',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                        Text(
+                          _isPlaying ? 'Playing ($_currentPlayer)' : _currentPlayer,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: _isPlaying ? Colors.green : Colors.grey,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -444,9 +335,9 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    _buildTestUrlButton('HLS Test Stream', 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'),
+                    _buildTestUrlButton('Mux HLS Test', 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8'),
+                    _buildTestUrlButton('Apple Sample HLS', 'https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_fmp4/master.m3u8'),
                     _buildTestUrlButton('Big Buck Bunny MP4', 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4'),
-                    _buildTestUrlButton('Sintel MP4', 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4'),
                   ],
                 ),
               ),
@@ -460,6 +351,22 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                 child: _buildVideoPlayer(),
               ),
             ),
+            
+            // Control buttons when playing
+            if (_isPlaying) 
+              Padding(
+                padding: const EdgeInsets.only(top: 16),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _togglePlayPause,
+                      icon: Icon(_isPlaying ? Icons.pause : Icons.play_arrow),
+                      label: Text(_isPlaying ? 'Pause' : 'Play'),
+                    ),
+                  ],
+                ),
+              ),
             
             // Status Section
             if (_errorMessage != null)
@@ -504,211 +411,46 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       );
     }
 
-    
-
-    // VLC Player
-    if (_vlcPlayerController != null) {
+    // VLC Player for mobile/desktop
+    if (!kIsWeb && _vlcPlayerController != null) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            VlcPlayer(
-              controller: _vlcPlayerController!,
-              aspectRatio: 16 / 9,
-              placeholder: const Center(
-                child: CircularProgressIndicator(),
-              ),
-            ),
-            // Custom controls overlay for VLC
-            if (_showControls)
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withOpacity(0.3),
-                        Colors.transparent,
-                        Colors.transparent,
-                        Colors.black.withOpacity(0.3),
-                      ],
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      // Control buttons for VLC
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              onPressed: _togglePlayPause,
-                              icon: Icon(
-                                _isPlaying ? Icons.pause : Icons.play_arrow,
-                                color: Colors.white,
-                                size: 32,
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: _toggleMute,
-                              icon: const Icon(
-                                Icons.volume_up,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            const Text(
-                              'VLC Player',
-                              style: TextStyle(color: Colors.white70),
-                            ),
-                            const Spacer(),
-                            IconButton(
-                              onPressed: () {
-                                setState(() {
-                                  _showControls = !_showControls;
-                                });
-                              },
-                              icon: const Icon(
-                                Icons.settings,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            // Tap to toggle controls
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _showControls = !_showControls;
-                });
-              },
-              child: Container(
-                color: Colors.transparent,
-                width: double.infinity,
-                height: double.infinity,
-              ),
-            ),
-          ],
+        child: VlcPlayer(
+          controller: _vlcPlayerController!,
+          aspectRatio: 16 / 9,
+          placeholder: const Center(
+            child: CircularProgressIndicator(),
+          ),
         ),
       );
     }
 
-    // Standard Video Player
+    // Standard Video Player for web and fallback
     if (_videoPlayerController != null && _videoPlayerController!.value.isInitialized) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            AspectRatio(
-              aspectRatio: _videoPlayerController!.value.aspectRatio,
-              child: VideoPlayer(_videoPlayerController!),
-            ),
-            // Custom controls overlay
-            if (_showControls)
-              Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [
-                        Colors.black.withOpacity(0.3),
-                        Colors.transparent,
-                        Colors.transparent,
-                        Colors.black.withOpacity(0.3),
-                      ],
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    children: [
-                      // Progress bar
-                      VideoProgressIndicator(
-                        _videoPlayerController!,
-                        allowScrubbing: true,
-                        colors: const VideoProgressColors(
-                          playedColor: Colors.red,
-                          bufferedColor: Colors.grey,
-                          backgroundColor: Colors.black26,
-                        ),
-                      ),
-                      // Control buttons
-                      Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Row(
-                          children: [
-                            IconButton(
-                              onPressed: _togglePlayPause,
-                              icon: Icon(
-                                _isPlaying ? Icons.pause : Icons.play_arrow,
-                                color: Colors.white,
-                                size: 32,
-                              ),
-                            ),
-                            IconButton(
-                              onPressed: _toggleMute,
-                              icon: Icon(
-                                _videoPlayerController!.value.volume > 0
-                                    ? Icons.volume_up
-                                    : Icons.volume_off,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              _formatDuration(_videoPlayerController!.value.position),
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                            const Text(
-                              ' / ',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                            Text(
-                              _formatDuration(_videoPlayerController!.value.duration),
-                              style: const TextStyle(color: Colors.white),
-                            ),
-                            const Spacer(),
-                            IconButton(
-                              onPressed: () {
-                                setState(() {
-                                  _showControls = !_showControls;
-                                });
-                              },
-                              icon: const Icon(
-                                Icons.settings,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+        child: AspectRatio(
+          aspectRatio: _videoPlayerController!.value.aspectRatio,
+          child: Stack(
+            children: [
+              VideoPlayer(_videoPlayerController!),
+              // Progress indicator overlay
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                child: VideoProgressIndicator(
+                  _videoPlayerController!,
+                  allowScrubbing: true,
+                  colors: const VideoProgressColors(
+                    playedColor: Colors.red,
+                    bufferedColor: Colors.grey,
+                    backgroundColor: Colors.black26,
                   ),
                 ),
               ),
-            // Tap to toggle controls
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _showControls = !_showControls;
-                });
-              },
-              child: Container(
-                color: Colors.transparent,
-                width: double.infinity,
-                height: double.infinity,
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       );
     }
@@ -729,7 +471,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Enter a stream URL and tap Play to start',
+              'Enter an HLS stream URL and tap Play to start',
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                 color: Colors.grey.shade600,
               ),
@@ -737,7 +479,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Supports HLS (.m3u8), FLV, MP4, and other stream formats',
+              'Supports HLS (.m3u8) streams and MP4 videos',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Colors.grey.shade500,
               ),
@@ -752,33 +494,13 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                   border: Border.all(color: Colors.blue.shade200),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Column(
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.info, color: Colors.blue.shade700, size: 16),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Web Platform Notes:',
-                          style: TextStyle(
-                            color: Colors.blue.shade700,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      '• Some HLS streams may not work due to CORS restrictions\n'
-                      '• MP4 videos generally work better on web\n'
-                      '• Try the working test URLs provided above',
-                      style: TextStyle(
-                        color: Colors.blue.shade700,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
+                child: Text(
+                  'Web Platform: Using native video player with HLS support',
+                  style: TextStyle(
+                    color: Colors.blue.shade700,
+                    fontSize: 12,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ),
             ],
