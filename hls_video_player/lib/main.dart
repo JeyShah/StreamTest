@@ -15,6 +15,7 @@ class HLSVideoPlayerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'HLS Video Player',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
         useMaterial3: true,
@@ -78,6 +79,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       _cleanup();
 
       if (kIsWeb) {
+        // On web, video_player_web_hls will automatically handle HLS streams
         await _playWithVideoPlayer(url);
       } else {
         // Try VLC first for better HLS support on mobile/desktop
@@ -164,7 +166,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
     setState(() {
       _isLoading = false;
       _isPlaying = true;
-      _currentPlayer = kIsWeb ? 'Web Player' : 'Standard Player';
+      _currentPlayer = kIsWeb ? 'HLS Web Player' : 'Standard Player';
     });
   }
 
@@ -425,7 +427,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
       );
     }
 
-    // Standard Video Player for web and fallback
+    // Standard Video Player (with HLS support on web via video_player_web_hls)
     if (_videoPlayerController != null && _videoPlayerController!.value.isInitialized) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(8),
@@ -495,7 +497,7 @@ class _VideoPlayerScreenState extends State<VideoPlayerScreen> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
-                  'Web Platform: Using native video player with HLS support',
+                  'Web Platform: Using video_player_web_hls for optimal HLS support',
                   style: TextStyle(
                     color: Colors.blue.shade700,
                     fontSize: 12,
