@@ -27,6 +27,7 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
   bool _isPlaying = false;
   String _status = 'Enter HLS URL to start';
   final deviceID = "66666353076524353";
+  bool? _lastIsPlaying;
 
   @override
   void initState() {
@@ -125,25 +126,13 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
       _videoController = VideoPlayerController.networkUrl(Uri.parse(url));
       await _videoController!.initialize();
 
-      _chewieController = ChewieController(
-        videoPlayerController: _videoController!,
-        autoPlay: true,
-        looping: false,
-        errorBuilder: (context, errorMessage) {
-          return Center(
-            child: Text(
-              errorMessage,
-              style: const TextStyle(color: Colors.white),
-            ),
-          );
-        },
-      );
+      await _initializeChewieController(url);
 
       setState(() {
         _isLoading = false;
         _isPlaying = true;
         _status =
-            'Playing: \${_videoController!.value.size.width.toInt()}x\${_videoController!.value.size.height.toInt()}';
+            'Playing: ${_chewieController!.videoPlayerController.value.size.width.toInt()}x${_chewieController!.videoPlayerController.value.size.height.toInt()}';
       });
 
       _showMessage('Stream started successfully!');
@@ -213,17 +202,19 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
       );
 
       if (result?['code'] == 9045) {
-        showAppAlert(
-          context: context,
-          title: "Stream Paused",
-          message: "Your video stream has been paused successfully.",
-        );
+        print("STREAM PAUSEDDDD");
+        // showAppAlert(
+        //   context: context,
+        //   title: "Stream Paused",
+        //   message: "Your video stream has been paused successfully.",
+        // );
       } else {
-        showAppAlert(
-          context: context,
-          title: "Issue: Stream Pause",
-          message: "Issue in pausing stream.",
-        );
+        print("STREAM NOT PAUSEDDDD");
+        // showAppAlert(
+        //   context: context,
+        //   title: "Issue: Stream Pause",
+        //   message: "Issue in pausing stream.",
+        // );
       }
       print('Stream paused: $result');
     } catch (e) {
@@ -241,17 +232,19 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
       );
 
       if (result?['code'] == 9045) {
-        showAppAlert(
-          context: context,
-          title: "Stream Resumed",
-          message: "Your video stream has been resumed successfully.",
-        );
+        print("STREAM RESUMMEDDDDD");
+        // showAppAlert(
+        //   context: context,
+        //   title: "Stream Resumed",
+        //   message: "Your video stream has been resumed successfully.",
+        // );
       } else {
-        showAppAlert(
-          context: context,
-          title: "Issue: Stream Resume",
-          message: "Issue in resuming stream.",
-        );
+        print("STREAM NOT RESUMMEDDDDD");
+        // showAppAlert(
+        //   context: context,
+        //   title: "Issue: Stream Resume",
+        //   message: "Issue in resuming stream.",
+        // );
       }
       print('Stream resumed: $result');
     } catch (e) {
@@ -291,13 +284,46 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
     );
   }
 
+  void _handlePlayPause(bool isPlaying) {
+    if (isPlaying) {
+      _resumeVideoStreamApi();
+    } else {
+      _pauseVideoStreamApi();
+    }
+  }
+
+  Future<void> _initializeChewieController(String url) async {
+    _videoController = VideoPlayerController.network(url);
+    await _videoController!.initialize();
+
+    _chewieController = ChewieController(
+      videoPlayerController: _videoController!,
+      autoPlay: true,
+      looping: false,
+    );
+
+    // 🔹 Attach listener only once
+    _chewieController!.videoPlayerController.addListener(_videoStateListener);
+
+    setState(() {});
+  }
+
   Widget _buildPlayer() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     } else if (kIsWeb) {
-      return WebHLSPlayer(url: _urlController.text.trim());
+      return WebHLSPlayer(url: _urlController.text.trim(),
+        onPlayPauseChanged: _handlePlayPause,
+      );
     } else if (_chewieController != null &&
-        _chewieController!.videoPlayerController.value.isInitialized) {
+      _chewieController!.videoPlayerController.value.isInitialized) {
+      // ✅ Native player (Chewie)
+      final vpController = _chewieController!.videoPlayerController;
+
+      // attach listener once
+      vpController.removeListener(_videoStateListener);
+      vpController.addListener(_videoStateListener);
+
       return Chewie(controller: _chewieController!);
     } else {
       return const Center(
@@ -306,6 +332,24 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
           style: TextStyle(color: Colors.white70),
         ),
       );
+    }
+  }
+
+  void _videoStateListener() {
+    final vpController = _chewieController?.videoPlayerController;
+    if (vpController == null || !vpController.value.isInitialized) return;
+
+    final isPlaying = vpController.value.isPlaying;
+
+    // 🔹 Only trigger when actual state changes
+    if (_lastIsPlaying != isPlaying) {
+      _lastIsPlaying = isPlaying;
+
+      if (isPlaying) {
+        _resumeVideoStreamApi();
+      } else {
+        _pauseVideoStreamApi();
+      }
     }
   }
 
