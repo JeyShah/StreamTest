@@ -1,23 +1,13 @@
 import 'package:flutter/material.dart';
 import 'hls_player_page.dart';
+import 'locator.dart';
+import 'video_player_wrapper.dart';
 
 void main() {
-  runApp(const HLSPlayerApp());
-}
-
-class HLSPlayerApp extends StatelessWidget {
-  const HLSPlayerApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'HLS Video Player',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      home: const HLSPlayerPage(),
-      debugShowCheckedModeBanner: false,
-    );
-  }
+  setupLocator();
+  VideoPlayerWrapper.register(); // Safe across all platforms
+  runApp(const MaterialApp(
+    debugShowCheckedModeBanner: false,
+    home: HLSPlayerPage(),
+  ));
 }

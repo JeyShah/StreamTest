@@ -1,3 +1,14 @@
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.0.2' // ✅ Android Gradle Plugin
+        // Add others if needed, e.g., for Firebase, Kotlin, etc.
+    }
+}
+
 allprojects {
     repositories {
         google()
