@@ -28,11 +28,18 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
   String _status = 'Enter HLS URL to start';
   final deviceID = "66666353076524353";
   bool? _lastIsPlaying;
+  bool _isVideoStream = true;
+  Timer? _seekTimer;
+  final GlobalKey<WebHLSPlayerState> _webPlayerKey = GlobalKey();
+  DateTime? _playbackStartTime;
+  Duration? _lastPosition;
 
   @override
   void initState() {
     super.initState();
     _initiateVideoStreaming();
+    // _initiateVideoStreaming();
+    // _initiatePlayback();
     // _urlController.text = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
   }
 
@@ -44,6 +51,63 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
     }
     _urlController.dispose();
     super.dispose();
+  }
+
+  void _startSeekTimer({required bool isForward}) {
+
+    if (_isVideoStream) {
+      // Live stream: just do local seek
+    } else {
+      if (isForward) {
+        _fastForwardPlayback(); // API call
+      } else {
+        _rewindPlayback(); // API call
+      }
+    }
+
+    _seekTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+      if (kIsWeb) {
+        // 🔹 Safari / Web handling
+        // if (_webPlayerKey.currentState != null) {
+        //   _webPlayerKey.currentState!.seekBy(
+        //     isForward ? const Duration(seconds: 2) : const Duration(seconds: -2),
+        //   );
+        // }
+        _webPlayerKey.currentState?.seekBy(
+          isForward ? const Duration(seconds: 2) : const Duration(seconds: -2),
+        );
+        return;
+      }
+
+      // 🔹 Native platforms (Android/iOS with video_player)
+      final controller = _videoController;
+      if (controller == null || !controller.value.isInitialized) return;
+
+      final pos = controller.value.position;
+      final duration = controller.value.duration;
+
+      final newPos = isForward
+          ? pos + const Duration(seconds: 2)
+          : pos - const Duration(seconds: 2);
+
+      if (newPos < Duration.zero) {
+        controller.seekTo(Duration.zero);
+      } else if (newPos > duration) {
+        controller.seekTo(duration);
+      } else {
+        controller.seekTo(newPos);
+      }
+    });
+  }
+
+  void _stopSeekTimer() {
+    _seekTimer?.cancel();
+    _seekTimer = null;
+
+    if (!_isVideoStream) {
+      // 🔹 Reset playback to normal speed
+      _resumePlaybackApi();
+    }
   }
 
   Future<void> _initiateVideoStreaming() async {
@@ -92,6 +156,83 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
     }
   }
 
+  Future<void> _stopPlaybackApi() async {
+    final requestRes = await videoApi.stopPlayback(
+      sessionToken: "your-token",
+      deviceId: deviceID,
+      channel: 1
+    );
+
+    if (requestRes?['code'] == 9033) {
+      showAppAlert(
+        context: context,
+        title: "Playback Closed",
+        message: "Your playback has been closed successfully.",
+      );
+    } else {
+      showAppAlert(
+        context: context,
+        title: "Issue: Playback Closed",
+        message: "Issue in closing playback.",
+      );
+    }
+
+    print("stop playback res: $requestRes");
+  }
+
+  Future<void> _initiatePlayback() async {
+    final requestRes = await videoApi.requestVideoPlayback(
+      sessionToken: "your-token",
+      deviceId: deviceID,
+      channel: 1,
+      startTime: "2025-08-27T00:00:00Z",
+      endTime: "2025-08-28T20:12:00Z",
+      streamType: 0,
+    );
+
+    print("Request playback res: $requestRes");
+    if (requestRes?['code'] == 9015) {
+      final requestId = requestRes!['data']['requestId'];
+      print("Success: Request ID: $requestId");
+
+      // Second: get result
+      final resultRes = await videoApi.getPlaybackResult(
+        sessionToken: "your-token",
+        requestId: requestId,
+      );
+
+      print("Success: Request ID playback: $resultRes");
+
+      if (resultRes?['code'] == 9048) {
+        final type = resultRes!['data']['responseType'];
+        final startTime = DateTime.parse("2025-08-27T00:00:00Z");
+        _playbackStartTime = startTime;
+        print("Response Type: $type");
+
+        _urlController.text = convertFlvToM3u8(resultRes!['data']['videoUrl']);
+        print("Response Type: ${_urlController.text}");
+        print(_urlController.text);
+
+        _playVideo();
+
+        // switch (type) {
+        //   case "stream_with_list":
+        //     print("Video URL: ${resultRes['data']['videoUrl']}");
+        //     print("Videos: ${resultRes['data']['videoList']['videos']}");
+        //     break;
+        //   case "stream":
+        //     print("Video URL: ${resultRes['data']['videoUrl']}");
+        //     break;
+        //   case "list":
+        //     print("Videos: ${resultRes['data']['videos']}");
+        //     break;
+        //   default:
+        //     print("Unknown response type");
+        // }
+      }
+    }
+  }
+
   Future<void> _playVideo() async {
     final url = _urlController.text.trim();
     if (url.isEmpty) {
@@ -100,7 +241,7 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
     }
 
     if (_isPlaying) {
-      await _stopVideo();
+      await _isVideoStream ? _stopVideo() : _stopPlayback();
       return;
     }
 
@@ -164,6 +305,24 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
     });
   }
 
+  Future<void> _stopPlayback() async {
+    if (!kIsWeb) {
+      await _chewieController?.pause();
+      _chewieController?.dispose();
+      await _videoController?.dispose();
+
+      _chewieController = null;
+      _videoController = null;
+    }
+
+    _stopPlaybackApi();
+
+    setState(() {
+      _isPlaying = false;
+      _status = 'Stopped';
+    });
+  }
+
   /* SWITCH VIDEO STREAM API */
   Future<void> _switchVideoStreamApi() async {
     try {
@@ -176,7 +335,7 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
       if (result?['code'] == 9045) {
         showAppAlert(
           context: context,
-          title: "Stream/Cammera Switch",
+          title: "Stream/Camera Switch",
           message: "Your video stream/camera has been switched successfully.",
         );
       } else {
@@ -222,7 +381,69 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
     }
   }
 
-  /* PAUSE VIDEO STREAM API */
+  /* PAUSE PLAYBACK API */
+  Future<void> _pausePlaybackApi() async {
+    try {
+      final result = await videoApi.pausePlayback(
+        sessionToken: "your-token",
+        deviceId: deviceID,
+        channel: 1,
+      );
+
+      print("Playback pause: $result");
+
+      // if (result?['code'] == 9045) {
+      //   print("STREAM PAUSEDDDD");
+      //   // showAppAlert(
+      //   //   context: context,
+      //   //   title: "Stream Paused",
+      //   //   message: "Your video stream has been paused successfully.",
+      //   // );
+      // } else {
+      //   print("STREAM NOT PAUSEDDDD");
+      //   // showAppAlert(
+      //   //   context: context,
+      //   //   title: "Issue: Stream Pause",
+      //   //   message: "Issue in pausing stream.",
+      //   // );
+      // }
+      // print('Stream paused: $result');
+    } catch (e) {
+      print('Error: $e');
+    }
+  }
+
+  /* RESUME PLAY BACK API */
+  Future<void> _resumePlaybackApi() async {
+    try {
+      final result = await videoApi.resumePlayback(
+        sessionToken: "your-token",
+        deviceId: deviceID,
+        channel: 1,
+      );
+
+      if (result?['code'] == 9045) {
+        print("PLAYBACK RESUMMEDDDDD");
+        // showAppAlert(
+        //   context: context,
+        //   title: "Stream Resumed",
+        //   message: "Your video stream has been resumed successfully.",
+        // );
+      } else {
+        print("PLAYBACK NOT RESUMMEDDDDD");
+        // showAppAlert(
+        //   context: context,
+        //   title: "Issue: Stream Resume",
+        //   message: "Issue in resuming stream.",
+        // );
+      }
+      print('PLAYBACK resumed: $result');
+    } catch (e) {
+      print('Error: $e');
+    }
+  }
+
+  /* RESUME VIDEO STREAM API */
   Future<void> _resumeVideoStreamApi() async {
     try {
       final result = await videoApi.resumeVideoStream(
@@ -247,6 +468,93 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
         // );
       }
       print('Stream resumed: $result');
+    } catch (e) {
+      print('Error: $e');
+    }
+  }
+
+  Future<void> _fastForwardPlayback() async {
+    try {
+      final result = await videoApi.fastForwardPlayback(
+        sessionToken: "your-token",
+        deviceId: deviceID,
+        channel: 1,
+        playSpeed: 2,
+      );
+
+      if (result?['code'] == 9045) {
+        
+      } else {
+        
+      }
+      print('fast forward playback res: $result');
+    } catch (e) {
+      print('Error: $e');
+    }
+  }
+
+  Future<void> _rewindPlayback() async {
+    try {
+      final result = await videoApi.rewindPlayback(
+        sessionToken: "your-token",
+        deviceId: deviceID,
+        channel: 1,
+        playSpeed: 2,
+      );
+
+      if (result?['code'] == 9045) {
+        
+      } else {
+        
+      }
+      print('Rewind playback res: $result');
+    } catch (e) {
+      print('Error: $e');
+    }
+  }
+
+  Future<void> _seekPlaybackApi(String playAt) async {
+    try {
+      final result = await videoApi.seekPlayback(
+        sessionToken: "your-token",
+        deviceId: deviceID,
+        channel: 1,
+        playAt: playAt,
+      );
+
+      if (result?['code'] == 9045) {
+        
+      } else {
+        
+      }
+      print('Seek playback res: $result');
+    } catch (e) {
+      print('Error: $e');
+    }
+  }
+
+  Future<void> _stopIntercomApi() async {
+    try {
+      final result = await videoApi.stopIntercom(
+        sessionToken: "your-token",
+        deviceId: deviceID,
+        channel: 1,
+      );
+
+      if (result?['code'] == 9045) {
+        showAppAlert(
+          context: context,
+          title: "Stop Intercom",
+          message: "Your intercom has been stopped successfully.",
+        );
+      } else {
+        showAppAlert(
+          context: context,
+          title: "Issue: Stop Intercom",
+          message: "Issue in stopping intercom.",
+        );
+      }
+      print('Intercom stopped res: $result');
     } catch (e) {
       print('Error: $e');
     }
@@ -286,9 +594,9 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
 
   void _handlePlayPause(bool isPlaying) {
     if (isPlaying) {
-      _resumeVideoStreamApi();
+      _isVideoStream ? _resumeVideoStreamApi() : _resumePlaybackApi();
     } else {
-      _pauseVideoStreamApi();
+      _isVideoStream ? _pauseVideoStreamApi() : _pausePlaybackApi();
     }
   }
 
@@ -308,12 +616,26 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
     setState(() {});
   }
 
+  void _onWebSeek(Duration position) {
+    if (!_isVideoStream && _playbackStartTime != null) {
+      final playAt = _playbackStartTime!.add(position).toUtc().toIso8601String();
+      _seekPlaybackApi(playAt); // <-- API call stays in parent
+    }
+  }
+
   Widget _buildPlayer() {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     } else if (kIsWeb) {
-      return WebHLSPlayer(url: _urlController.text.trim(),
+      final url = _urlController.text.trim();
+      if (url.isEmpty) {
+        return const Center(child: Text("No URL provided"));
+      }
+      return WebHLSPlayer(
+        key: _webPlayerKey,
+        url: url, // ✅ always pass updated URL
         onPlayPauseChanged: _handlePlayPause,
+        onSeek: _onWebSeek,
       );
     } else if (_chewieController != null &&
       _chewieController!.videoPlayerController.value.isInitialized) {
@@ -340,6 +662,7 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
     if (vpController == null || !vpController.value.isInitialized) return;
 
     final isPlaying = vpController.value.isPlaying;
+    final position = vpController.value.position;
 
     // 🔹 Only trigger when actual state changes
     if (_lastIsPlaying != isPlaying) {
@@ -351,6 +674,35 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
         _pauseVideoStreamApi();
       }
     }
+
+    // 🔹 Detect Seek (skip/rewind/drag)
+    if (_lastPosition != null) {
+      final diff = (position - _lastPosition!).inSeconds.abs();
+      if (diff > 2) { // moved more than 2s → user dragged/seeked
+        if (_playbackStartTime != null && !_isVideoStream) {
+          final targetTime = _playbackStartTime!.add(position);
+          final playAt = targetTime.toUtc().toIso8601String();
+          _seekPlaybackApi(playAt); // ✅ call API
+        }
+      }
+    }
+
+    _lastPosition = position;
+  }
+
+  Widget _buildSwitchButton(String text, bool selected, VoidCallback onPressed) {
+    return ElevatedButton(
+      style: ElevatedButton.styleFrom(
+        backgroundColor: selected ? Colors.blue : Colors.grey[300],
+        foregroundColor: selected ? Colors.white : Colors.black,
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+      onPressed: onPressed,
+      child: Text(text),
+    );
   }
 
   @override
@@ -364,6 +716,29 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
         child: Column(
           children: [
             // Row with TextField + Configure button
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildSwitchButton("Video Stream", _isVideoStream, () {
+                  setState(() => {
+                    _isVideoStream = true,
+                    _stopPlayback(),
+                    _initiateVideoStreaming(),
+                  }
+                  );
+                }),
+                const SizedBox(width: 12),
+                _buildSwitchButton("Playback", !_isVideoStream, () {
+                  setState(() => {
+                    _isVideoStream = false,
+                    _stopVideo(),
+                    _initiatePlayback(),
+                  }
+                  );
+                }),
+              ],
+            ),
+            const SizedBox(height: 16),
             Row(
               children: [
                 Expanded(
@@ -432,7 +807,7 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
             ElevatedButton.icon(
               onPressed: _isLoading ? null : _playVideo,
               icon: Icon(_isPlaying ? Icons.stop : Icons.play_arrow),
-              label: Text(_isPlaying ? 'Stop' : 'Play'),
+              label: Text(_isPlaying ? _isVideoStream ? 'Stop' : 'Stop Playback' : _isVideoStream ? 'Play' : 'Play Playback'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _isPlaying ? Colors.red : Colors.green,
               ),
@@ -441,20 +816,32 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
             const SizedBox(height: 16),
 
             ElevatedButton.icon(
-              onPressed: _closeStreamApi,
+              onPressed: _isVideoStream ? _stopVideo: _stopPlayback,
               icon: const Icon(Icons.stop),
-              label: const Text('Close Stream'),
+              label: Text(_isVideoStream ? 'Close Stream': 'Close Playback'),
             ),
 
             const SizedBox(height: 16),
             Text(_status),
 
-            const SizedBox(height: 16),
+            Row(
+              children: [
+                const SizedBox(height: 16),
 
-            IconButton(
-              tooltip: "Switch Camera",
-              icon: const Icon(Icons.switch_camera), // <-- this is the switch camera icon
-              onPressed: _switchVideoStreamApi
+                IconButton(
+                  tooltip: "Switch Camera",
+                  icon: const Icon(Icons.switch_camera), // <-- this is the switch camera icon
+                  onPressed: _switchVideoStreamApi
+                ),
+
+                const SizedBox(height: 16),
+
+                IconButton(
+                  tooltip: "Stop Intercom",
+                  icon: const Icon(Icons.mic), // 📞 end call
+                  onPressed: _stopIntercomApi,
+                ),
+              ],
             ),
 
             const SizedBox(height: 16),
@@ -463,7 +850,46 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
               child: Container(
                 width: double.infinity,
                 color: Colors.black,
-                child: _buildPlayer(),
+                child: Stack(
+                  children: [
+                    // 🎥 The actual video player
+                    Positioned.fill(
+                      child: _buildPlayer(),
+                    ),
+
+                    // ⏪ Left half → rewind on long press
+                    Positioned.fill(
+                      right: MediaQuery.of(context).size.width / 2,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onLongPressStart: (_) {
+                          _startSeekTimer(isForward: false);
+                          setState(() => _status = "⏪ Rewinding...");
+                        },
+                        onLongPressEnd: (_) {
+                          _stopSeekTimer();
+                          setState(() => _status = "Playing");
+                        },
+                      ),
+                    ),
+
+                    // ⏩ Right half → forward on long press
+                    Positioned.fill(
+                      left: MediaQuery.of(context).size.width / 2,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.translucent,
+                        onLongPressStart: (_) {
+                          _startSeekTimer(isForward: true);
+                          setState(() => _status = "⏩ Forwarding...");
+                        },
+                        onLongPressEnd: (_) {
+                          _stopSeekTimer();
+                          setState(() => _status = "Playing");
+                        },
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ],

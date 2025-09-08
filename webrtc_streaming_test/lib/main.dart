@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'hls_player_page.dart';
+import 'splash_screen.dart';
 import 'locator.dart';
 import 'video_player_wrapper.dart';
 
@@ -8,6 +9,7 @@ void main() {
   VideoPlayerWrapper.register(); // Safe across all platforms
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
-    home: HLSPlayerPage(),
+    home: SplashScreen(),
+    // home: HLSPlayerPage(),
   ));
 }
