@@ -33,6 +33,9 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
   final GlobalKey<WebHLSPlayerState> _webPlayerKey = GlobalKey();
   DateTime? _playbackStartTime;
   Duration? _lastPosition;
+  DateTime? _startDateTime;
+  DateTime? _endDateTime;
+
 
   @override
   void initState() {
@@ -110,6 +113,27 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
     }
   }
 
+  Future<DateTime?> _pickDateTime(BuildContext context) async {
+    final date = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (date == null) return null;
+
+    final time = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.now(),
+    );
+    if (time == null) return null;
+
+    return DateTime(date.year, date.month, date.day, time.hour, time.minute);
+  }
+
+  String toIso8601WithZ(DateTime dt) =>
+    dt.toUtc().toIso8601String().split('.').first + "Z";
+
   Future<void> _initiateVideoStreaming() async {
     final requestRes = await videoApi.requestVideoStream(
       sessionToken: "your-token",
@@ -181,12 +205,15 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
   }
 
   Future<void> _initiatePlayback() async {
+    final startTime = toIso8601WithZ(_startDateTime!);
+    final endTime = toIso8601WithZ(_endDateTime!);
+
     final requestRes = await videoApi.requestVideoPlayback(
       sessionToken: "your-token",
       deviceId: deviceID,
       channel: 1,
-      startTime: "2025-08-27T00:00:00Z",
-      endTime: "2025-08-28T20:12:00Z",
+      startTime: startTime,
+      endTime: endTime,
       streamType: 0,
     );
 
@@ -715,99 +742,171 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // Row with TextField + Configure button
+            // --- Top row: Switch between Stream / Playback ---
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 _buildSwitchButton("Video Stream", _isVideoStream, () {
-                  setState(() => {
-                    _isVideoStream = true,
-                    _stopPlayback(),
-                    _initiateVideoStreaming(),
-                  }
-                  );
+                  setState(() {
+                    _isVideoStream = true;
+                    _stopPlayback();
+                    _startDateTime = null;
+                    _endDateTime = null;
+                    _initiateVideoStreaming();
+                  });
                 }),
                 const SizedBox(width: 12),
                 _buildSwitchButton("Playback", !_isVideoStream, () {
-                  setState(() => {
-                    _isVideoStream = false,
-                    _stopVideo(),
-                    _initiatePlayback(),
-                  }
-                  );
+                  setState(() {
+                    _isVideoStream = false;
+                    _stopVideo();
+                    // wait until user submits start/end times
+                  });
                 }),
               ],
             ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _urlController,
-                    decoration: const InputDecoration(
-                      labelText: 'HLS Stream URL (.m3u8)',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType: TextInputType.url,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  tooltip: "Configure Video",
-                  icon: const Icon(Icons.settings), // gear icon
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (_) => VideoConfigDialog(
-                        initialDeviceId: deviceID,
-                        onSubmit: (data) async {
-                          final requestRes = await videoApi.configureVideoParameters(
-                            sessionToken: "your-token",
-                            deviceId: data["deviceId"],
-                            channel: data["channel"],
-                            liveStreamEncodingMode: data["liveStreamEncodingMode"],
-                            liveStreamResolution: data["liveStreamResolution"],
-                            liveStreamKeyframeInterval: data["liveStreamKeyframeInterval"],
-                            liveStreamTargetFrameRate: data["liveStreamTargetFrameRate"],
-                            liveStreamTargetBitRate: data["liveStreamTargetBitRate"],
-                            saveStreamEncodingMode: data["saveStreamEncodingMode"],
-                            saveStreamResolution: data["saveStreamResolution"],
-                            saveStreamKeyframeInterval: data["saveStreamKeyframeInterval"],
-                            saveStreamTargetFrameRate: data["saveStreamTargetFrameRate"],
-                            saveStreamTargetBitRate: data["saveStreamTargetBitRate"],
-                            osdSubtitleOverlay: data["osdSubtitleOverlay"],
-                            enableAudioOutput: data["enableAudioOutput"],
-                          );
 
-                          print("Video configuration res: $requestRes");
-                          if (requestRes?['code'] == 9036) {
-                            showAppAlert(
-                              context: context,
-                              title: "Video Settings",
-                              message: "Your video configuration set successfully.",
-                            );
-                          }
-                          else {
-                            showAppAlert(
-                              context: context,
-                              title: "Issue: Video Settings",
-                              message: "Issue in video configuration set.",
-                            );
-                          }
-                        },
+            const SizedBox(height: 16),
+
+            // --- Stream Mode: URL + Configure Video ---
+            if (_isVideoStream) ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _urlController,
+                      decoration: const InputDecoration(
+                        labelText: 'HLS Stream URL (.m3u8)',
+                        border: OutlineInputBorder(),
                       ),
+                      keyboardType: TextInputType.url,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    tooltip: "Configure Video",
+                    icon: const Icon(Icons.settings),
+                    onPressed: () {
+                      showDialog(
+                        context: context,
+                        builder: (_) => VideoConfigDialog(
+                          initialDeviceId: deviceID,
+                          onSubmit: (data) async {
+                            final requestRes =
+                                await videoApi.configureVideoParameters(
+                              sessionToken: "your-token",
+                              deviceId: data["deviceId"],
+                              channel: data["channel"],
+                              liveStreamEncodingMode:
+                                  data["liveStreamEncodingMode"],
+                              liveStreamResolution:
+                                  data["liveStreamResolution"],
+                              liveStreamKeyframeInterval:
+                                  data["liveStreamKeyframeInterval"],
+                              liveStreamTargetFrameRate:
+                                  data["liveStreamTargetFrameRate"],
+                              liveStreamTargetBitRate:
+                                  data["liveStreamTargetBitRate"],
+                              saveStreamEncodingMode:
+                                  data["saveStreamEncodingMode"],
+                              saveStreamResolution:
+                                  data["saveStreamResolution"],
+                              saveStreamKeyframeInterval:
+                                  data["saveStreamKeyframeInterval"],
+                              saveStreamTargetFrameRate:
+                                  data["saveStreamTargetFrameRate"],
+                              saveStreamTargetBitRate:
+                                  data["saveStreamTargetBitRate"],
+                              osdSubtitleOverlay: data["osdSubtitleOverlay"],
+                              enableAudioOutput: data["enableAudioOutput"],
+                            );
+
+                            print("Video configuration res: $requestRes");
+                            if (requestRes?['code'] == 9036) {
+                              showAppAlert(
+                                context: context,
+                                title: "Video Settings",
+                                message:
+                                    "Your video configuration set successfully.",
+                              );
+                            } else {
+                              showAppAlert(
+                                context: context,
+                                title: "Issue: Video Settings",
+                                message:
+                                    "Issue in video configuration set.",
+                              );
+                            }
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
+            ] else ...[
+              // --- Playback Mode: Start/End Pickers + Submit ---
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final picked = await _pickDateTime(context);
+                        if (picked != null) {
+                          setState(() => _startDateTime = picked);
+                        }
+                      },
+                      child: Text(_startDateTime == null
+                          ? "Pick Start Time"
+                          : "Start: ${_startDateTime.toString()}"),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final picked = await _pickDateTime(context);
+                        if (picked != null) {
+                          setState(() => _endDateTime = picked);
+                        }
+                      },
+                      child: Text(_endDateTime == null
+                          ? "Pick End Time"
+                          : "End: ${_endDateTime.toString()}"),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.cloud_download),
+                label: const Text("Submit Playback Request"),
+                onPressed: () async {
+                  if (_startDateTime == null || _endDateTime == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                          content: Text("Please select both Start and End times")),
                     );
-                  },
-                ),
-              ],
-            ),
+                    return;
+                  }
+                  await _initiatePlayback();
+                },
+              ),
+            ],
 
             const SizedBox(height: 16),
 
+            // --- Play / Stop main button ---
             ElevatedButton.icon(
               onPressed: _isLoading ? null : _playVideo,
               icon: Icon(_isPlaying ? Icons.stop : Icons.play_arrow),
-              label: Text(_isPlaying ? _isVideoStream ? 'Stop' : 'Stop Playback' : _isVideoStream ? 'Play' : 'Play Playback'),
+              label: Text(_isPlaying
+                  ? _isVideoStream
+                      ? 'Stop'
+                      : 'Stop Playback'
+                  : _isVideoStream
+                      ? 'Play'
+                      : 'Play Playback'),
               style: ElevatedButton.styleFrom(
                 backgroundColor: _isPlaying ? Colors.red : Colors.green,
               ),
@@ -815,30 +914,29 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
 
             const SizedBox(height: 16),
 
+            // --- Close button ---
             ElevatedButton.icon(
-              onPressed: _isVideoStream ? _stopVideo: _stopPlayback,
+              onPressed: _isVideoStream ? _stopVideo : _stopPlayback,
               icon: const Icon(Icons.stop),
-              label: Text(_isVideoStream ? 'Close Stream': 'Close Playback'),
+              label: Text(_isVideoStream ? 'Close Stream' : 'Close Playback'),
             ),
 
             const SizedBox(height: 16),
             Text(_status),
 
+            // --- Camera + Intercom controls ---
             Row(
               children: [
                 const SizedBox(height: 16),
-
                 IconButton(
                   tooltip: "Switch Camera",
-                  icon: const Icon(Icons.switch_camera), // <-- this is the switch camera icon
-                  onPressed: _switchVideoStreamApi
+                  icon: const Icon(Icons.switch_camera),
+                  onPressed: _switchVideoStreamApi,
                 ),
-
                 const SizedBox(height: 16),
-
                 IconButton(
                   tooltip: "Stop Intercom",
-                  icon: const Icon(Icons.mic), // 📞 end call
+                  icon: const Icon(Icons.mic),
                   onPressed: _stopIntercomApi,
                 ),
               ],
@@ -846,18 +944,16 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
 
             const SizedBox(height: 16),
 
+            // --- Video Player ---
             Expanded(
               child: Container(
                 width: double.infinity,
                 color: Colors.black,
                 child: Stack(
                   children: [
-                    // 🎥 The actual video player
-                    Positioned.fill(
-                      child: _buildPlayer(),
-                    ),
+                    Positioned.fill(child: _buildPlayer()),
 
-                    // ⏪ Left half → rewind on long press
+                    // rewind zone
                     Positioned.fill(
                       right: MediaQuery.of(context).size.width / 2,
                       child: GestureDetector(
@@ -873,7 +969,7 @@ class _HLSPlayerPageState extends State<HLSPlayerPage> {
                       ),
                     ),
 
-                    // ⏩ Right half → forward on long press
+                    // forward zone
                     Positioned.fill(
                       left: MediaQuery.of(context).size.width / 2,
                       child: GestureDetector(

@@ -9,7 +9,7 @@ void main() {
   VideoPlayerWrapper.register(); // Safe across all platforms
   runApp(const MaterialApp(
     debugShowCheckedModeBanner: false,
-    home: SplashScreen(),
-    // home: HLSPlayerPage(),
+    // home: SplashScreen(),
+    home: HLSPlayerPage(),
   ));
 }
