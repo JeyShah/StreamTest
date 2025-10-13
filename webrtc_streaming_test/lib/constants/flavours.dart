@@ -1,5 +1,8 @@
+import '../config.dart';
+
 class FlavorConfig {
-  static const int appType = 3; // 0 = Gpsina, 1 = Xtrack, 2 = Startrack
+  // Use the centralized AppConfig for app type
+  static int get appType => AppConfig.currentAppType;
 
   static const List<String> appLogos = [
     "assets/gpsinaLogo.png",
@@ -8,5 +11,9 @@ class FlavorConfig {
     "assets/soundstreamLogo.png",
   ];
 
-  static String get currentAppLogo => appLogos[appType];
+  // Use the centralized configuration for current logo
+  static String get currentAppLogo => AppConfig.logoAsset;
+  
+  // Keep backward compatibility
+  static String getAppLogo(int type) => appLogos[type];
 }
